@@ -1,0 +1,2 @@
+G$?foo<Enter>NrX<Esc>
+:wq<Enter>

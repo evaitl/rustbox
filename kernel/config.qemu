@@ -1,0 +1,116 @@
+# RustBox QEMU x86_64 kernel configuration (defconfig format).
+#
+# Kernel source is NOT stored in this repository. Download a tarball outside the
+# clone and set KERNEL_SRC when building:
+#
+#   curl -LO https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.tar.xz
+#   tar xf linux-7.1.tar.xz -C ~/src
+#   KERNEL_SRC=~/src/linux-7.1 ./scripts/build-kernel.sh
+#   ./scripts/qemu-smoke.sh
+
+CONFIG_64BIT=y
+CONFIG_X86_64=y
+CONFIG_X86=y
+CONFIG_OUTPUT_FORMAT="elf64-x86-64"
+CONFIG_GENERIC_CLOCKEVENTS=y
+CONFIG_GENERIC_CLOCKEVENTS_BROADCAST=y
+CONFIG_IRQ_WORK=y
+CONFIG_BUILDTIME_TABLE_SORT=y
+CONFIG_THREAD_INFO_IN_TASK=y
+CONFIG_IA32_EMULATION=y
+
+CONFIG_LOCALVERSION="-rustbox"
+CONFIG_DEFAULT_HOSTNAME="rustbox"
+
+# Initramfs / initrd (gzip cpio from mkinitrd.sh)
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_INITRAMFS_SOURCE=""
+CONFIG_RD_GZIP=y
+CONFIG_RD_XZ=y
+CONFIG_RD_LZ4=y
+CONFIG_RD_ZSTD=y
+
+CONFIG_BLK_DEV_RAM=y
+CONFIG_BLK_DEV_RAM_COUNT=16
+CONFIG_BLK_DEV_RAM_SIZE=65536
+
+# Serial console for qemu -nographic (console=ttyS0)
+CONFIG_TTY=y
+CONFIG_UNIX98_PTYS=y
+CONFIG_DEVPTS_MULTIPLE_INSTANCES=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_SERIAL_8250_PCI=y
+CONFIG_SERIAL_CORE=y
+CONFIG_SERIAL_CORE_CONSOLE=y
+CONFIG_PRINTK=y
+CONFIG_EARLY_PRINTK=y
+CONFIG_CONSOLE_LOGLEVEL_DEFAULT=7
+CONFIG_MESSAGE_LOGLEVEL_DEFAULT=4
+CONFIG_CMDLINE_BOOL=y
+CONFIG_CMDLINE="console=ttyS0 panic=1"
+
+# Pseudo filesystems used by the rustbox initrd inittab
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+CONFIG_TMPFS=y
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_DEVTMPFS=y
+
+CONFIG_BINFMT_ELF=y
+CONFIG_BINFMT_SCRIPT=y
+
+# Block layer and common QEMU virtio devices
+CONFIG_BLOCK=y
+CONFIG_BLK_DEV=y
+CONFIG_PCI=y
+CONFIG_PCI_MMCONFIG=y
+CONFIG_ACPI=y
+CONFIG_HYPERVISOR_GUEST=y
+CONFIG_PARAVIRT=y
+CONFIG_PARAVIRT_CLOCK=y
+CONFIG_PARAVIRT_SPINLOCKS=y
+CONFIG_KVM_GUEST=y
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_PCI_LEGACY=y
+CONFIG_VIRTIO_MENU=y
+CONFIG_VIRTIO_BLK=y
+CONFIG_VIRTIO_CONSOLE=y
+
+# Networking (QEMU: -netdev user,id=net0 -device virtio-net-pci,netdev=net0)
+CONFIG_NET=y
+CONFIG_UNIX=y
+CONFIG_INET=y
+CONFIG_IPV6=y
+CONFIG_PACKET=y
+CONFIG_NETDEVICES=y
+CONFIG_NET_CORE=y
+CONFIG_ETHERNET=y
+CONFIG_NET_VENDOR_INTEL=y
+CONFIG_E1000=y
+CONFIG_VIRTIO_NET=y
+
+# Optional virtio root disk
+CONFIG_EXT4_FS=y
+CONFIG_EXT4_USE_FOR_EXT2=y
+
+# halt / reboot applets
+CONFIG_POWER_RESET=y
+CONFIG_REBOOT=y
+
+CONFIG_HZ=250
+CONFIG_NO_HZ_IDLE=y
+CONFIG_HIGH_RES_TIMERS=y
+CONFIG_MAGIC_SYSRQ=y
+
+# Smaller/faster build; QEMU works fine with -smp 1
+# CONFIG_SMP is not set
+
+# Built-in only (no modules to install into the initrd)
+# CONFIG_MODULES is not set
+
+# Skip host objtool build (needs libelf-dev + zlib + zstd on the build host)
+# CONFIG_OBJTOOL is not set
+# CONFIG_UNWINDER_ORC is not set
+CONFIG_UNWINDER_FRAME_POINTER=y

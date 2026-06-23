@@ -1,0 +1,11 @@
+# RustBox QEMU interactive shell (no smoke test on boot)
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mount -t devtmpfs devtmpfs /dev
+::sysinit:/bin/mkdir -p /dev/pts /tmp /run
+::sysinit:/bin/mount -t devpts devpts /dev/pts
+::sysinit:/sbin/setup-ping-range
+::sysinit:/bin/ifconfig lo 127.0.0.1 up
+::sysinit:/bin/hostname -F /etc/hostname
+::sysinit:/bin/echo rustbox shell ready
+::respawn:/bin/rash

@@ -1,0 +1,4 @@
+#!/bin/rash
+printf 'Content-Type: text/plain\r\n\r\n'
+printf 'Hello from CGI\n'
+printf 'QUERY_STRING=%s\n' "${QUERY_STRING:-}"

@@ -1,0 +1,3 @@
+#!/bin/rash
+printf 'Content-Type: text/plain\r\n\r\n'
+printf 'smoke-cgi-ok\n'

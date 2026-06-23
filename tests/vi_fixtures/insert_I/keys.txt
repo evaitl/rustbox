@@ -1,0 +1,2 @@
+IPRE<Esc>
+:wq<Enter>

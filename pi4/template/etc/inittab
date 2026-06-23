@@ -1,0 +1,17 @@
+# RustBox Pi 4 hardware image
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mdev -s
+::sysinit:/bin/mkdir -p /dev/pts /tmp /run /var/log
+::sysinit:/bin/mount -t devpts devpts /dev/pts
+::sysinit:/sbin/setup-ping-range
+::sysinit:/bin/ifconfig lo 127.0.0.1 up
+::sysinit:/bin/hostname -F /etc/hostname
+::sysinit:/bin/udhcpc -i eth0 -q -n -t 5
+::sysinit:/bin/ifconfig eth0
+::sysinit:/bin/echo rustbox pi4 ready
+::respawn:/bin/mdev -d
+::respawn:/bin/dnscached
+::respawn:/bin/thttpd
+::respawn:/bin/sshd
+tty1::respawn:/bin/rash -i

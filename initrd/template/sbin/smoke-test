@@ -1,0 +1,138 @@
+#!/bin/rash
+# QEMU smoke test for rustbox initrd utilities.
+
+# Wall-clock limit (seconds). Host qemu-smoke.sh uses the same default (60).
+SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-60}"
+START=$(date +%s)
+
+deadline() {
+    NOW=$(date +%s)
+    if [ "$((NOW - START))" -ge "$SMOKE_TIMEOUT" ]; then
+        echo smoke: timeout
+        exit 1
+    fi
+}
+
+deadline
+echo smoke: grep
+echo hello | grep -q hello || exit 1
+
+deadline
+echo smoke: find
+find /bin -name rash | grep -q rash || exit 1
+
+deadline
+echo smoke: sed
+echo test | sed 's/e/E/' | grep -q tEst || exit 1
+
+deadline
+echo smoke: cut
+echo "a:b:c" | cut -d: -f2 | grep -q b || exit 1
+
+deadline
+echo smoke: tr
+echo abc | tr a-z A-Z | grep -q ABC || exit 1
+
+deadline
+echo smoke: sort
+echo b > /tmp/sort.in
+echo a >> /tmp/sort.in
+sort /tmp/sort.in > /tmp/sort.out || exit 1
+grep -q '^a$' /tmp/sort.out || exit 1
+
+deadline
+echo smoke: arithmetic
+i=0
+while [ "$i" -lt 2 ]; do
+  i=$((i + 1))
+done
+[ "$i" -eq 2 ] || exit 1
+
+deadline
+echo smoke: break
+n=0
+while [ "$n" -lt 5 ]; do
+  n=$((n + 1))
+  if [ "$n" -eq 2 ]; then
+    break
+  fi
+done
+[ "$n" -eq 2 ] || exit 1
+
+deadline
+echo smoke: dmesg
+dmesg >/dev/null || exit 1
+
+deadline
+echo smoke: cron
+cron -n -c /etc/cron.test || exit 1
+
+deadline
+echo smoke: date
+date +%Y >/dev/null || exit 1
+
+deadline
+echo smoke: ps
+ps | grep -q PID || exit 1
+
+deadline
+echo smoke: kill
+kill -0 1 || exit 1
+
+deadline
+echo smoke: hostname
+hostname -F /etc/hostname || exit 1
+hostname | grep -q rustbox || exit 1
+
+deadline
+echo smoke: net
+udhcpc -i eth0 -q -n -t 5 || exit 1
+
+deadline
+echo smoke: ifconfig
+ifconfig lo | grep -q 'inet ' || exit 1
+ifconfig eth0 | grep -q 'inet ' || exit 1
+
+deadline
+echo smoke: route
+grep -q eth0 /proc/net/route || exit 1
+
+deadline
+echo smoke: ping
+ping -c 1 -W 3 -q 10.0.2.2 || exit 1
+
+deadline
+echo smoke: thttpd
+thttpd -t || exit 1
+
+deadline
+echo smoke: wget
+wget -q -O /tmp/smoke-index.html http://127.0.0.1/ || exit 1
+grep -q 'rustbox thttpd' /tmp/smoke-index.html || exit 1
+
+deadline
+echo smoke: logger
+logger -t smoke 'qemu smoke line' || exit 1
+grep -q 'qemu smoke line' /var/log/messages || exit 1
+
+deadline
+echo smoke: dig
+dig @127.0.0.1 example.com | grep -q 'Query time' || exit 1
+
+deadline
+echo smoke: ntpclient
+/sbin/fake-ntp-reply >/tmp/ntp.reply
+nc -u -l -p 123 -w 10 </tmp/ntp.reply &
+sleep 1
+ntpclient -t 3 127.0.0.1 || exit 1
+
+deadline
+echo smoke: nc
+NC_PORT=45678
+printf 'nc-ok\n' >/tmp/nc.reply
+nc -l -p "$NC_PORT" -w 5 </tmp/nc.reply &
+sleep 1
+nc 127.0.0.1 "$NC_PORT" -w 3 >/tmp/nc.out
+grep -q nc-ok /tmp/nc.out || exit 1
+
+echo smoke: ok

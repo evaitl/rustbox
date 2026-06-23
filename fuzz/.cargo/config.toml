@@ -1,0 +1,2 @@
+[env]
+RUSTBOX_APPLETS_CONFIG = { value = "applets-fuzz.json", relative = true }

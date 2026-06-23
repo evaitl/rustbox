@@ -1,0 +1,24 @@
+# RustBox Raspberry Pi 4 kernel fragment (merged onto bcm2711_defconfig).
+#
+# Used by scripts/build-pi-kernel.sh with the Raspberry Pi Linux tree:
+#   git clone --depth=1 https://github.com/raspberrypi/linux -b rpi-6.6.y ~/src/linux-rpi
+#   KERNEL_SRC=~/src/linux-rpi ./scripts/build-pi-kernel.sh
+
+CONFIG_LOCALVERSION="-rustbox"
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_EXT4_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_NLS_CODEPAGE_437=y
+CONFIG_NLS_ISO8859_1=y
+# Onboard Gigabit Ethernet (eth0) on Pi 4.
+CONFIG_BCMGENET=y
+CONFIG_PHYLIB=y
+# USB keyboard on the Pi 4 USB ports.
+CONFIG_USB_SUPPORT=y
+CONFIG_USB_XHCI_HCD=y
+CONFIG_HID_GENERIC=y
+CONFIG_INPUT_EVDEV=y
+# HDMI framebuffer console (tty1).
+CONFIG_VT=y
+CONFIG_VT_CONSOLE=y
+CONFIG_FRAMEBUFFER_CONSOLE=y

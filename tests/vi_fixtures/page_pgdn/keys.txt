@@ -1,0 +1,2 @@
+<PageDown>rX<Esc>
+:wq<Enter>

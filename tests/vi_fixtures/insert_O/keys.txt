@@ -1,0 +1,2 @@
+jOnew<Esc>
+:wq<Enter>

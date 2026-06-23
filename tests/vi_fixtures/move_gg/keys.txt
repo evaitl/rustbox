@@ -1,0 +1,2 @@
+ggrX<Esc>
+:wq<Enter>

@@ -1,0 +1,7 @@
+# RustBox Raspberry Pi 4 boot configuration
+arm_64bit=1
+kernel=kernel8.img
+device_tree=bcm2711-rpi-4-b.dtb
+disable_overscan=1
+# HDMI framebuffer console (tty1); attach a monitor and USB keyboard.
+hdmi_force_hotplug=1

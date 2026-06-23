@@ -1,0 +1,4 @@
+A!<Esc>
+:w<Enter>
+A?<Esc>
+:wq<Enter>

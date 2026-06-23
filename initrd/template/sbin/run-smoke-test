@@ -1,0 +1,2 @@
+#!/bin/rash
+/sbin/smoke-test || halt -f

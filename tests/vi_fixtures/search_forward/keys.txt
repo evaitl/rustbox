@@ -1,0 +1,2 @@
+/world<Enter>r!<Esc>
+:wq<Enter>
