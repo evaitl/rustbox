@@ -141,6 +141,33 @@ fn sh_or_short_circuit() {
 }
 
 #[test]
+fn rash_or_brace_group_with_semicolon() {
+    let status = Rustbox::new()
+        .applet("sh")
+        .args(["-c", "false || { exit 9; }"])
+        .status();
+    assert_eq!(status, 9);
+}
+
+#[test]
+fn rash_subshell_with_semicolon_before_close() {
+    let status = Rustbox::new()
+        .applet("sh")
+        .args(["-c", "false || ( exit 8; )"])
+        .status();
+    assert_eq!(status, 8);
+}
+
+#[test]
+fn rash_brace_group_multiple_commands() {
+    let out = Rustbox::new()
+        .applet("sh")
+        .args(["-c", "{ echo one; echo two; }"])
+        .stdout();
+    assert_eq!(out.trim(), "one\ntwo");
+}
+
+#[test]
 fn sh_export() {
     let out = Rustbox::new()
         .applet("sh")
@@ -675,4 +702,241 @@ fn rash_mixed_quoting_on_one_line() {
         .args(["-c", "X=expanded; echo 'lit $X' $X"])
         .stdout();
     assert_eq!(out.trim(), "lit $X expanded");
+}
+
+// --- POSIX feature combinations (rash) ---
+
+#[test]
+fn rash_for_body_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "for x in a b; do echo $(echo item-$x); done"])
+        .stdout();
+    assert_eq!(out.trim(), "item-a\nitem-b");
+}
+
+#[test]
+fn rash_for_list_mixed_literals_and_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "for x in a $(echo b) c; do echo $x; done"])
+        .stdout();
+    assert_eq!(out.trim(), "a\nb\nc");
+}
+
+#[test]
+fn rash_for_single_word_from_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "for x in $(echo solo); do echo \"[$x]\"; done"])
+        .stdout();
+    assert_eq!(out.trim(), "[solo]");
+}
+
+#[test]
+fn rash_for_builds_string_via_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "out=\"\"; for i in 1 2 3; do out=\"$out$(echo $i)\"; done; echo $out",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "123");
+}
+
+#[test]
+fn rash_for_continue_with_command_substitution_in_body() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "for n in 1 2 3; do if [ $n -eq 2 ]; then continue; fi; echo $(echo n=$n); done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "n=1\nn=3");
+}
+
+#[test]
+fn rash_for_arithmetic_accumulator() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "sum=0; for n in 1 2 3; do sum=$((sum + n)); done; echo $sum",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "6");
+}
+
+#[test]
+fn rash_while_command_substitution_in_test() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "x=0; while [ $x -lt $(echo 3) ]; do echo $x; x=$((x + 1)); done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "0\n1\n2");
+}
+
+#[test]
+fn rash_while_body_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "x=0; while [ $x -lt $(echo 2) ]; do x=$((x + 1)); echo $(echo step-$x); done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "step-1\nstep-2");
+}
+
+#[test]
+fn rash_if_test_uses_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "if [ \"$(echo yes)\" = yes ]; then echo ok; fi"])
+        .stdout();
+    assert_eq!(out.trim(), "ok");
+}
+
+#[test]
+fn rash_if_n_test_on_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "if [ -n \"$(echo text)\" ]; then echo nonempty; fi"])
+        .stdout();
+    assert_eq!(out.trim(), "nonempty");
+}
+
+#[test]
+fn rash_case_word_from_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "case $(echo hi) in hi) echo matched ;; *) echo no ;; esac",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "matched");
+}
+
+#[test]
+fn rash_case_in_for_with_command_substitution_pattern() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "for f in one two; do case $f in $(echo one)) echo match ;; *) echo no ;; esac; done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "match\nno");
+}
+
+#[test]
+fn rash_if_pipeline_in_condition() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "if echo hi | grep -q hi; then echo pipe-ok; fi"])
+        .stdout();
+    assert_eq!(out.trim(), "pipe-ok");
+}
+
+#[test]
+fn rash_or_brace_with_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "false || { echo $(echo brace); }"])
+        .stdout();
+    assert_eq!(out.trim(), "brace");
+}
+
+#[test]
+fn rash_function_for_loop_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "tags() { for x in 1 2; do echo $(echo tag-$x); done; }; tags",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "tag-1\ntag-2");
+}
+
+#[test]
+fn rash_for_redirect_and_read_back() {
+    let dir = TestDir::new();
+    let path = dir.join("items.txt");
+    let status = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            &format!(
+                "for d in one two; do echo $d >> {}; done; cat {}",
+                path.display(),
+                path.display()
+            ),
+        ])
+        .status();
+    assert_eq!(status, 0);
+    assert_eq!(dir.read("items.txt").trim(), "one\ntwo");
+}
+
+#[test]
+fn rash_for_case_with_arithmetic_expansion() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "for i in 1 2; do case $((i*2)) in 2|4) echo pair-$i ;; esac; done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "pair-1\npair-2");
+}
+
+#[test]
+fn rash_for_runs_exported_subshell() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "export P=parent; for x in 1; do sh -c 'echo $P'; done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "parent");
+}
+
+#[test]
+fn rash_while_arithmetic_loop() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "n=1; while [ $n -le 3 ]; do echo $((n*10)); n=$((n+1)); done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "10\n20\n30");
+}
+
+#[test]
+fn rash_set_e_exits_inside_for_loop() {
+    let status = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "set -e; for x in ok; do false; done; echo never"])
+        .status();
+    assert_ne!(status, 0);
+}
+
+#[test]
+fn rash_for_break_after_command_substitution() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "for n in 1 2 3; do echo $(echo n=$n); if [ $n -eq 2 ]; then break; fi; done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "n=1\nn=2");
 }

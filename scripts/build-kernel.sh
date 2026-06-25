@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/kernel-source.sh
+source "$ROOT/scripts/kernel-source.sh"
 KERNEL_SRC="${KERNEL_SRC:-}"
 KERNEL_CONFIG="${KERNEL_CONFIG:-$ROOT/kernel/config.qemu}"
 INSTALL="${KERNEL_INSTALL:-$ROOT/kernel/vmlinuz}"
@@ -15,11 +17,7 @@ die() {
 }
 
 find_kernel_src() {
-    if [[ -n "$KERNEL_SRC" ]]; then
-        printf '%s\n' "$KERNEL_SRC"
-        return
-    fi
-    die "set KERNEL_SRC to a Linux source tree outside this repository (see docs/QEMU.md)"
+    resolve_kernel_src "$ROOT"
 }
 
 setup_tools() {
@@ -54,7 +52,7 @@ main() {
 
     install -D "$KERNEL_SRC/arch/x86/boot/bzImage" "$INSTALL"
     printf 'build-kernel: wrote %s\n' "$INSTALL"
-    printf 'build-kernel: run: KERNEL=%s ./scripts/qemu-test.sh\n' "$INSTALL"
+    printf 'build-kernel: run: ./scripts/qemu-smoke.sh\n'
 }
 
 main "$@"

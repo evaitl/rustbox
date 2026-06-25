@@ -233,7 +233,7 @@ impl<'a> Parser<'a> {
     fn parse_command_inner(&mut self) -> Result<Command, ParseError> {
         self.skip_blank();
         if self.consume_char('{') {
-            let list = self.parse_list()?;
+            let list = self.parse_list_until(&["}"])?;
             self.skip_list_separators();
             if !self.consume_char('}') {
                 return Err(ParseError::Expected("}"));
@@ -241,7 +241,7 @@ impl<'a> Parser<'a> {
             return Ok(Command::Brace(list));
         }
         if self.consume_char('(') {
-            let list = self.parse_list()?;
+            let list = self.parse_list_until(&[")"])?;
             self.skip_list_separators();
             if !self.consume_char(')') {
                 return Err(ParseError::Expected(")"));

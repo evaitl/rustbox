@@ -76,27 +76,26 @@ INITRD=initrd/initrd-shell.img ./scripts/qemu-test.sh
 
 End-to-end regression test: builds the initrd, boots QEMU with a virtio NIC (user-mode NAT), runs DHCP via `udhcpc`, and checks the serial log for `smoke: ok`. The test runs [`initrd/template/sbin/smoke-test`](../initrd/template/sbin/smoke-test) during boot (grep, find, sed, cut, tr, sort, shell arithmetic, `break`, `dmesg`, `cron -n`, `date`, `ps`, `kill -0`, `hostname -F /etc/hostname`, `udhcpc`, `ifconfig`, `route`, `ping`, `wget`, `logger`, `dig @127.0.0.1`, `ntpclient` with [`fake-ntp-reply`](../initrd/template/sbin/fake-ntp-reply), `nc` loopback, and `thttpd -t` exercising CGI, directory listing via `ls -al`, and `wget` against [`cgi-bin/smoke-cgi`](../initrd/template/var/www/cgi-bin/smoke-cgi) and [`listing-test/`](../initrd/template/var/www/listing-test/)).
 
-**Prerequisites:** `cargo`, `cpio`, `gzip`, `qemu-system-x86_64`, and a Linux kernel image. To build the dedicated test kernel you also need kernel build tools (`make`, `flex`, `bison`, `libssl-dev`, `libelf-dev`, `bc`, …).
+**Prerequisites:** `cargo`, `cpio`, `gzip`, `qemu-system-x86_64`, and the rustbox-built kernel at `kernel/vmlinuz` (see below). Kernel build tools (`make`, `flex`, `bison`, `libssl-dev`, `libelf-dev`, `bc`, …) are needed the first time.
 
-**Kernel source is not part of this repository.** Only [`kernel/config.qemu`](../kernel/config.qemu) is tracked. Download and unpack a kernel tarball somewhere outside the clone (for example `~/src/linux-7.1`), then point `KERNEL_SRC` at that tree.
+Smoke requires a kernel with **virtio-net built in** ([`kernel/config.qemu`](../kernel/config.qemu)). Host `/boot/vmlinuz-*` images often load virtio-net as a module; the initrd has no modules, so **`qemu-smoke.sh` does not use the host kernel**.
+
+Place a Linux 7.1 source tree under `kernel/` (gitignored). Either unpack yourself or drop the tarball in place — [`scripts/build-kernel.sh`](../scripts/build-kernel.sh) and [`scripts/kernel-source.sh`](../scripts/kernel-source.sh) use `kernel/linux-7.1` when present, or extract `kernel/linux-7.1.tar.xz` automatically:
 
 ```bash
-# 1. Fetch kernel source (once, outside the rustbox clone)
-mkdir -p ~/src && cd ~/src
-curl -LO https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.tar.xz
-tar xf linux-7.1.tar.xz
+# Once: fetch the tarball into kernel/ (not tracked in git)
+curl -Lo kernel/linux-7.1.tar.xz https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.tar.xz
 
-# 2. Build the rustbox test kernel (writes kernel/vmlinuz in the clone)
-cd /path/to/rustbox
-KERNEL_SRC=$HOME/src/linux-7.1 ./scripts/build-kernel.sh
+# Build kernel/vmlinuz (extracts the tarball on first run if needed)
+./scripts/build-kernel.sh
 
-# 3. Run the smoke test
+# Run smoke (rebuilds initrd; builds kernel/vmlinuz first if missing)
 ./scripts/qemu-smoke.sh
 ```
 
-`qemu-smoke.sh` rebuilds the initrd, boots QEMU with `kernel/vmlinuz` (or `KERNEL` if set), and exits 0 when the log contains `smoke: ok`. On success it **kills QEMU immediately** instead of waiting for the guest to shut down. The run is limited to **`SMOKE_TIMEOUT` seconds (default 60)**; if the guest does not finish in time, the script sends SIGKILL to QEMU (and related child processes) and fails. Inside the guest, [`sbin/smoke-test`](../initrd/template/sbin/smoke-test) enforces the same wall-clock limit and prints `smoke: timeout` on expiry; init halts the VM if the smoke test fails so the host does not sit idle until the outer timeout. On failure, inspect `initrd/qemu-smoke.log`.
+`qemu-smoke.sh` uses `KERNEL` when set, otherwise `kernel/vmlinuz`, otherwise runs `build-kernel.sh`. It exits 0 when the serial log contains `smoke: ok`. On success it **kills QEMU immediately** instead of waiting for the guest to shut down. The run is limited to **`SMOKE_TIMEOUT` seconds (default 60)**; if the guest does not finish in time, the script sends SIGKILL to QEMU (and related child processes) and fails. Inside the guest, [`sbin/smoke-test`](../initrd/template/sbin/smoke-test) enforces the same wall-clock limit and prints `smoke: timeout` on expiry; init halts the VM if the smoke test fails so the host does not sit idle until the outer timeout. On failure, inspect `initrd/qemu-smoke.log`.
 
-If you already have a suitable `bzImage`/`vmlinuz`, skip the build step:
+Override the kernel image explicitly:
 
 ```bash
 KERNEL=/path/to/vmlinuz ./scripts/qemu-smoke.sh
@@ -104,8 +103,8 @@ KERNEL=/path/to/vmlinuz ./scripts/qemu-smoke.sh
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `KERNEL_SRC` | *(required for build)* | Path to unpacked Linux source (outside this repo) |
-| `KERNEL` | `kernel/vmlinuz`, then host `/boot/vmlinuz-*` | Kernel image for QEMU |
+| `KERNEL_SRC` | `kernel/linux-7.1` (or extract `kernel/linux-7.1.tar.xz`) | Unpacked Linux source for `build-kernel.sh` |
+| `KERNEL` | `kernel/vmlinuz` (built on demand) | Kernel image for QEMU (**smoke only**; no host fallback) |
 | `SMOKE_TIMEOUT` | `60` | Host wall-clock limit if `smoke: ok` never appears; guest `smoke-test` uses the same default |
 | `SMOKE_LOG` | `initrd/qemu-smoke.log` | QEMU serial output log |
 
@@ -113,21 +112,19 @@ KERNEL=/path/to/vmlinuz ./scripts/qemu-smoke.sh
 
 From the repository root:
 
-**1. Fetch a Linux source tree** (once, **outside** this repository):
+**1. Fetch a Linux 7.1 source tree** (once; gitignored under `kernel/`):
 
 ```bash
-mkdir -p ~/src && cd ~/src
-curl -LO https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.tar.xz
-tar xf linux-7.1.tar.xz
+curl -Lo kernel/linux-7.1.tar.xz https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.tar.xz
 ```
 
 **2. Build the kernel** using [`kernel/config.qemu`](../kernel/config.qemu):
 
 ```bash
-KERNEL_SRC=$HOME/src/linux-7.1 ./scripts/build-kernel.sh
+./scripts/build-kernel.sh
 ```
 
-This copies the defconfig, runs `make olddefconfig`, builds `arch/x86/boot/bzImage`, and installs `kernel/vmlinuz`. Override paths if needed:
+This uses `kernel/linux-7.1` or extracts `kernel/linux-7.1.tar.xz`, copies the defconfig, runs `make olddefconfig`, builds `arch/x86/boot/bzImage`, and installs `kernel/vmlinuz`. Override paths if needed:
 
 ```bash
 KERNEL_SRC=/path/to/linux \
@@ -192,14 +189,14 @@ Exit QEMU with `Ctrl-A` then `X`.
 
 | Variable | Script | Default | Purpose |
 |----------|--------|---------|---------|
-| `KERNEL_SRC` | `build-kernel.sh` | *(required)* | Path to Linux source tree **outside** this repo |
+| `KERNEL_SRC` | `build-kernel.sh` | `kernel/linux-7.1` (or extract `kernel/linux-7.1.tar.xz`) | Path to Linux source tree |
 | `KERNEL_CONFIG` | `build-kernel.sh` | `kernel/config.qemu` | Kernel defconfig to install |
 | `KERNEL_INSTALL` | `build-kernel.sh` | `kernel/vmlinuz` | Where to install `bzImage` |
 | `JOBS` | `build-kernel.sh` | `nproc` | Parallel `make` jobs |
 | `INITRD_OUTPUT` | `mkinitrd.sh` | `initrd/initrd.img` | Output initrd path |
 | `INITTAB_TEMPLATE` | `mkinitrd.sh` | `initrd/template/etc/inittab` | Inittab file staged as `/etc/inittab` |
 | `INITRD_TARGET` | `mkinitrd.sh` | `x86_64-unknown-linux-musl` if installed | Rust cross-compile target |
-| `KERNEL` | `qemu-test.sh`, `qemu-smoke.sh` | auto-detect | Kernel image (`bzImage` / `vmlinuz`) |
+| `KERNEL` | `qemu-test.sh`, `qemu-smoke.sh` | `kernel/vmlinuz` (`qemu-test.sh` may fall back to host kernel; smoke does not) | Kernel image (`bzImage` / `vmlinuz`) |
 | `INITRD` | `qemu-test.sh`, `qemu-shell.sh` | `initrd/initrd.img` (or `initrd-shell.img` from `qemu-shell.sh`) | Initrd image |
 | `SMOKE_TIMEOUT` | `qemu-smoke.sh` | `30` | Host wall-clock limit if `smoke: ok` never appears; guest `smoke-test` uses the same default |
 | `SMOKE_LOG` | `qemu-smoke.sh` | `initrd/qemu-smoke.log` | QEMU serial log from smoke test |
@@ -213,4 +210,4 @@ Exit QEMU with `Ctrl-A` then `X`.
 
 - **Applet or rustbox code changes** — rerun `./scripts/mkinitrd.sh` (kernel rebuild not needed).
 - **Inittab or initrd layout** — edit `initrd/template/`, then rerun `./scripts/mkinitrd.sh` (or `./scripts/qemu-shell.sh` for the shell image).
-- **Kernel features** — edit `kernel/config.qemu`, then rerun `KERNEL_SRC=... ./scripts/build-kernel.sh`.
+- **Kernel features** — edit `kernel/config.qemu`, then rerun `./scripts/build-kernel.sh`.

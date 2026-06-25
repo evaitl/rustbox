@@ -22,6 +22,12 @@ const TELNET_DO: u8 = 253;
 const TELNET_WONT: u8 = 252;
 const TELNET_WILL: u8 = 251;
 const ECHO: u8 = 1;
+const NAWS: u8 = 31;
+const SB: u8 = 250;
+const SE: u8 = 240;
+
+/// Offer NAWS at session start so clients send terminal size updates.
+const OFFER_NAWS: &[u8] = &[IAC, TELNET_WILL, NAWS];
 
 /// IAC DONT ECHO — ask client not to echo (password prompt).
 const SUPPRESS_ECHO: &[u8] = &[IAC, TELNET_DONT, ECHO];
@@ -168,7 +174,7 @@ fn run_pty_shell(client: RawFd) -> Result<()> {
         }
         Fork::ParentOf(child) => {
             close_fd(slave);
-            relay_telnet(client, master);
+            relay_telnet(client, master, child);
             close_fd(client);
             close_fd(master);
             let _ = rustix::process::waitpid(Some(child), rustix::process::WaitOptions::empty());
@@ -183,7 +189,9 @@ fn set_child_env() {
     }
 }
 
-fn relay_telnet(client: RawFd, master: RawFd) {
+fn relay_telnet(client: RawFd, master: RawFd, child: rustix::process::Pid) {
+    let _ = write_all(client, OFFER_NAWS);
+    let mut decoder = TelnetDecoder::new(master, child);
     let mut client_buf = [0u8; 4096];
     let mut master_buf = [0u8; 4096];
     let mut pending = Vec::new();
@@ -210,7 +218,7 @@ fn relay_telnet(client: RawFd, master: RawFd) {
             match read(unsafe { BorrowedFd::borrow_raw(client) }, &mut client_buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    pending.extend_from_slice(&strip_telnet(&client_buf[..n]));
+                    decoder.decode(&client_buf[..n], &mut pending);
                     while !pending.is_empty() {
                         match write(unsafe { BorrowedFd::borrow_raw(master) }, &pending) {
                             Ok(0) => break,
@@ -238,6 +246,112 @@ fn relay_telnet(client: RawFd, master: RawFd) {
                 Err(Error::INTR) => {}
                 Err(_) => break,
             }
+        }
+    }
+}
+
+struct TelnetDecoder {
+    master: RawFd,
+    child: rustix::process::Pid,
+    state: TelnetState,
+    sub_buf: Vec<u8>,
+    sub_escape: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TelnetState {
+    Normal,
+    Iac,
+    SkipOption,
+    SubNeg,
+}
+
+impl TelnetDecoder {
+    fn new(master: RawFd, child: rustix::process::Pid) -> Self {
+        Self {
+            master,
+            child,
+            state: TelnetState::Normal,
+            sub_buf: Vec::new(),
+            sub_escape: false,
+        }
+    }
+
+    fn decode(&mut self, input: &[u8], out: &mut Vec<u8>) {
+        for &byte in input {
+            self.feed(byte, out);
+        }
+    }
+
+    fn feed(&mut self, byte: u8, out: &mut Vec<u8>) {
+        match self.state {
+            TelnetState::Normal => {
+                if byte == IAC {
+                    self.state = TelnetState::Iac;
+                } else {
+                    out.push(byte);
+                }
+            }
+            TelnetState::Iac => match byte {
+                IAC => {
+                    out.push(IAC);
+                    self.state = TelnetState::Normal;
+                }
+                SB => {
+                    self.sub_buf.clear();
+                    self.sub_escape = false;
+                    self.state = TelnetState::SubNeg;
+                }
+                TELNET_WILL | TELNET_WONT | TELNET_DO | TELNET_DONT => {
+                    self.state = TelnetState::SkipOption;
+                }
+                _ => self.state = TelnetState::Normal,
+            },
+            TelnetState::SkipOption => {
+                self.state = TelnetState::Normal;
+            }
+            TelnetState::SubNeg => {
+                if self.sub_escape {
+                    if byte == SE {
+                        self.apply_subnegotiation();
+                        self.state = TelnetState::Normal;
+                    } else {
+                        self.sub_buf.push(byte);
+                    }
+                    self.sub_escape = false;
+                } else if byte == IAC {
+                    self.sub_escape = true;
+                } else {
+                    self.sub_buf.push(byte);
+                }
+            }
+        }
+    }
+
+    fn apply_subnegotiation(&mut self) {
+        if let Some((cols, rows)) = parse_naws(&self.sub_buf) {
+            apply_winsize(self.master, self.child, cols, rows);
+        }
+    }
+}
+
+fn parse_naws(payload: &[u8]) -> Option<(u32, u32)> {
+    if payload.first().copied() != Some(NAWS) || payload.len() < 5 {
+        return None;
+    }
+    let cols = (u32::from(payload[1]) << 8) | u32::from(payload[2]);
+    let rows = (u32::from(payload[3]) << 8) | u32::from(payload[4]);
+    Some((cols.max(1), rows.max(1)))
+}
+
+fn apply_winsize(master: RawFd, child: rustix::process::Pid, cols: u32, rows: u32) {
+    if set_winsize(master, cols, rows).is_err() {
+        return;
+    }
+    let pid = child.as_raw_nonzero().get();
+    if pid > 0 {
+        unsafe {
+            libc::kill(pid, libc::SIGWINCH);
         }
     }
 }
@@ -408,7 +522,24 @@ mod tests {
     }
 
     #[test]
-    fn decode_line_strips_telnet() {
-        assert_eq!(decode_line(b"user\xff\xfb\x01"), "user");
+    fn parse_naws_dimensions() {
+        assert_eq!(parse_naws(&[NAWS, 0, 80, 0, 24]), Some((80, 24)));
+        assert_eq!(parse_naws(&[NAWS, 1, 44, 0, 50]), Some((300, 50)));
+    }
+
+    #[test]
+    fn telnet_decoder_applies_naws() {
+        let mut out = Vec::new();
+        let mut dec = TelnetDecoder {
+            master: -1,
+            child: rustix::process::Pid::from_raw(1).unwrap(),
+            state: TelnetState::Normal,
+            sub_buf: Vec::new(),
+            sub_escape: false,
+        };
+        dec.decode(b"hi", &mut out);
+        assert_eq!(out, b"hi");
+        dec.decode(&[IAC, SB, NAWS, 0, 80, 0, 24, IAC, SE, b'b'], &mut out);
+        assert_eq!(out, b"hib");
     }
 }

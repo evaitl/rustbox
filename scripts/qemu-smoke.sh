@@ -23,23 +23,28 @@ kill_qemu_force() {
     pkill -KILL -f "qemu-system-x86_64.*${INITRD}" 2>/dev/null || true
 }
 
+resolve_smoke_kernel() {
+    if [[ -n "${KERNEL:-}" && -f "${KERNEL}" ]]; then
+        printf '%s\n' "$KERNEL"
+        return 0
+    fi
+    if [[ -f "$ROOT/kernel/vmlinuz" ]]; then
+        printf '%s\n' "$ROOT/kernel/vmlinuz"
+        return 0
+    fi
+    printf 'qemu-smoke: kernel/vmlinuz missing; building from kernel/config.qemu\n' >&2
+    "$ROOT/scripts/build-kernel.sh" >&2
+    [[ -f "$ROOT/kernel/vmlinuz" ]] || die "build-kernel.sh did not produce kernel/vmlinuz"
+    printf '%s\n' "$ROOT/kernel/vmlinuz"
+}
+
 main() {
     command -v qemu-system-x86_64 >/dev/null 2>&1 || die "missing qemu-system-x86_64"
 
     "$ROOT/scripts/mkinitrd.sh"
 
-    local kernel=""
-    if [[ -n "${KERNEL:-}" && -f "${KERNEL}" ]]; then
-        kernel="${KERNEL}"
-    elif [[ -f "$ROOT/kernel/vmlinuz" ]]; then
-        kernel="$ROOT/kernel/vmlinuz"
-    elif [[ -f "/boot/vmlinuz-$(uname -r)" ]]; then
-        kernel="/boot/vmlinuz-$(uname -r)"
-    else
-        printf 'qemu-smoke: kernel/vmlinuz missing; run build-kernel.sh first\n' >&2
-        "$ROOT/scripts/build-kernel.sh"
-        kernel="$ROOT/kernel/vmlinuz"
-    fi
+    local kernel
+    kernel="$(resolve_smoke_kernel)"
 
     printf 'qemu-smoke: kernel=%s\n' "$kernel" >&2
     printf 'qemu-smoke: initrd=%s\n' "$INITRD" >&2

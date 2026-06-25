@@ -73,16 +73,10 @@ fn tcp_listen(port: u16, timeout_secs: u32) -> Result<()> {
         return Err(err);
     }
 
-    let client_fd = if timeout_secs > 0 {
-        accept_with_timeout(listen_fd, timeout_secs)?
-    } else {
-        let client_fd =
-            unsafe { libc::accept(listen_fd, std::ptr::null_mut(), std::ptr::null_mut()) };
-        if client_fd < 0 {
-            return Err(sys::last_errno());
-        }
-        client_fd
-    };
+    let client_fd = unsafe { libc::accept(listen_fd, std::ptr::null_mut(), std::ptr::null_mut()) };
+    if client_fd < 0 {
+        return Err(sys::last_errno());
+    }
     close_fd(listen_fd);
 
     relay(std::io::stdin().as_raw_fd(), client_fd, timeout_secs);
@@ -268,10 +262,17 @@ fn relay(stdin_fd: RawFd, sock_fd: RawFd, timeout_secs: u32) {
     let mut sock_buf = [0u8; 4096];
     let mut stdin_open = true;
     let mut stdout = io::stdout();
+    let idle_limit = timeout_secs > 0;
+    let idle = Duration::from_secs(u64::from(timeout_secs));
+    let mut last_activity = Instant::now();
 
     loop {
-        let timeout_ms = if timeout_secs > 0 {
-            (timeout_secs * 1000) as i32
+        let timeout_ms = if idle_limit {
+            let remaining = idle.saturating_sub(Instant::now().duration_since(last_activity));
+            if remaining.is_zero() {
+                break;
+            }
+            remaining.as_millis().min(i32::MAX as u128) as i32
         } else {
             -1
         };
@@ -300,6 +301,7 @@ fn relay(stdin_fd: RawFd, sock_fd: RawFd, timeout_secs: u32) {
             ) {
                 Ok(0) => stdin_open = false,
                 Ok(n) => {
+                    last_activity = Instant::now();
                     if write_all_stream(sock_fd, &stdin_buf[..n]).is_err() {
                         break;
                     }
@@ -316,6 +318,7 @@ fn relay(stdin_fd: RawFd, sock_fd: RawFd, timeout_secs: u32) {
             ) {
                 Ok(0) => break,
                 Ok(n) => {
+                    last_activity = Instant::now();
                     if stdout.write_all(&sock_buf[..n]).is_err() {
                         break;
                     }
@@ -513,45 +516,6 @@ fn connect_with_timeout(fd: RawFd, peer: &libc::sockaddr_in, timeout_secs: u32) 
                 return Ok(());
             }
             return Err(sys::Error::from_raw_os_error(code));
-        }
-    }
-}
-
-fn accept_with_timeout(listen_fd: RawFd, timeout_secs: u32) -> Result<RawFd> {
-    let deadline = Instant::now() + Duration::from_secs(u64::from(timeout_secs.max(1)));
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            return Err(sys::Error::TIMEDOUT);
-        }
-        let ms = remaining.as_millis().min(i32::MAX as u128) as i32;
-        let mut pfd = libc::pollfd {
-            fd: listen_fd,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        let n = unsafe { libc::poll(&mut pfd, 1, ms) };
-        if n == 0 {
-            return Err(sys::Error::TIMEDOUT);
-        }
-        if n < 0 {
-            let err = sys::last_errno();
-            if err == sys::Error::INTR {
-                continue;
-            }
-            return Err(err);
-        }
-        if (pfd.revents & libc::POLLIN) != 0 {
-            let client_fd =
-                unsafe { libc::accept(listen_fd, std::ptr::null_mut(), std::ptr::null_mut()) };
-            if client_fd < 0 {
-                let err = sys::last_errno();
-                if err == sys::Error::INTR {
-                    continue;
-                }
-                return Err(err);
-            }
-            return Ok(client_fd);
         }
     }
 }

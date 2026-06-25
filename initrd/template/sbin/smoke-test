@@ -130,9 +130,8 @@ deadline
 echo smoke: nc
 NC_PORT=45678
 printf 'nc-ok\n' >/tmp/nc.reply
-nc -l -p "$NC_PORT" -w 5 </tmp/nc.reply &
-sleep 1
-nc 127.0.0.1 "$NC_PORT" -w 3 >/tmp/nc.out
+( sleep 1; nc 127.0.0.1 "$NC_PORT" -w 5 </dev/null >/tmp/nc.out ) &
+nc -l -p "$NC_PORT" -w 5 </tmp/nc.reply || exit 1
 grep -q nc-ok /tmp/nc.out || exit 1
 
 echo smoke: ok
