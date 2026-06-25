@@ -26,6 +26,7 @@ pub fn expand_word(ctx: &ExpandCtx<'_>, word: &str, split: bool) -> Result<Vec<S
     let mut chars = word.chars().peekable();
     let mut in_single = false;
     let mut in_double = false;
+    let ifs = if split { Some(ifs_chars(ctx)) } else { None };
 
     while let Some(ch) = chars.next() {
         if in_single {
@@ -68,6 +69,9 @@ pub fn expand_word(ctx: &ExpandCtx<'_>, word: &str, split: bool) -> Result<Vec<S
                     pattern.push(chars.next().unwrap());
                 }
                 glob_expand(&pattern, &mut fields)?;
+            }
+            _ if is_ifs(ch, ifs.as_ref()) => {
+                push_field(&mut fields, std::mem::take(&mut current));
             }
             _ => current.push(ch),
         }
@@ -339,6 +343,17 @@ fn push_field(fields: &mut Vec<String>, value: String) {
     }
 }
 
+fn ifs_chars(ctx: &ExpandCtx<'_>) -> Vec<char> {
+    ctx.vars
+        .get("IFS")
+        .map(|s| s.chars().collect())
+        .unwrap_or_else(|| vec![' ', '\t', '\n'])
+}
+
+fn is_ifs(ch: char, ifs: Option<&Vec<char>>) -> bool {
+    ifs.is_some_and(|set| set.contains(&ch))
+}
+
 fn glob_expand(pattern: &str, fields: &mut Vec<String>) -> Result<(), ()> {
     let (prefix, pat) = split_glob_prefix(pattern);
     let dir = if prefix.is_empty() {
@@ -499,6 +514,63 @@ mod tests {
         }];
         let argv = expand_argv_words(&mut shell, &words).unwrap();
         assert_eq!(argv, vec!["$(not expanded)"]);
+    }
+
+    #[test]
+    fn splits_expanded_word_on_default_ifs() {
+        let mut vars = HashMap::new();
+        vars.insert("IFS".to_string(), " \t\n".to_string());
+        let positional = vec!["rash".to_string()];
+        let ctx = ExpandCtx {
+            vars,
+            positional: &positional,
+            last_status: 0,
+            nounset: false,
+        };
+        assert_eq!(
+            expand_word(&ctx, "a b c", true).unwrap(),
+            vec!["a", "b", "c"]
+        );
+        assert_eq!(expand_word(&ctx, "a\nb", true).unwrap(), vec!["a", "b"]);
+        assert_eq!(expand_word(&ctx, "a  b", true).unwrap(), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn double_quoted_word_does_not_split_on_ifs() {
+        let mut vars = HashMap::new();
+        vars.insert("IFS".to_string(), " \t\n".to_string());
+        let positional = vec!["rash".to_string()];
+        let ctx = ExpandCtx {
+            vars,
+            positional: &positional,
+            last_status: 0,
+            nounset: false,
+        };
+        assert_eq!(expand_word(&ctx, "a b c", false).unwrap(), vec!["a b c"]);
+    }
+
+    #[test]
+    fn argv_splits_command_substitution_on_ifs() {
+        use super::super::Shell;
+        let mut shell = Shell::new();
+        let words = vec![super::super::parse::Word {
+            text: "$(echo a b c)".to_string(),
+            quote: QuoteMode::None,
+        }];
+        let argv = expand_argv_words(&mut shell, &words).unwrap();
+        assert_eq!(argv, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn argv_keeps_quoted_command_substitution_unsplit() {
+        use super::super::Shell;
+        let mut shell = Shell::new();
+        let words = vec![super::super::parse::Word {
+            text: "$(echo a b c)".to_string(),
+            quote: QuoteMode::Double,
+        }];
+        let argv = expand_argv_words(&mut shell, &words).unwrap();
+        assert_eq!(argv, vec!["a b c"]);
     }
 
     #[test]

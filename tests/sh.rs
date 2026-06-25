@@ -707,6 +707,47 @@ fn rash_mixed_quoting_on_one_line() {
 // --- POSIX feature combinations (rash) ---
 
 #[test]
+fn rash_for_splits_command_substitution_on_spaces() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "for x in $(echo a b c); do echo $x; done"])
+        .stdout();
+    assert_eq!(out.trim(), "a\nb\nc");
+}
+
+#[test]
+fn rash_for_splits_command_substitution_on_newlines() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            "for x in $(echo one; echo two; echo three); do echo $x; done",
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "one\ntwo\nthree");
+}
+
+#[test]
+fn rash_quoted_command_substitution_not_split() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "set -- \"$(echo a b c)\"; echo $#; echo \"$1\""])
+        .stdout();
+    let lines: Vec<&str> = out.trim().lines().collect();
+    assert_eq!(lines[0], "1");
+    assert_eq!(lines[1], "a b c");
+}
+
+#[test]
+fn rash_echo_expands_unquoted_command_substitution_to_words() {
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "echo $(echo a b c)"])
+        .stdout();
+    assert_eq!(out.trim(), "a b c");
+}
+
+#[test]
 fn rash_for_body_command_substitution() {
     let out = Rustbox::new()
         .applet("rash")
