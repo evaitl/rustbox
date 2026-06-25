@@ -6,9 +6,49 @@ RustBox is a BusyBox-style multi-call binary aimed at embedded and initramfs use
 
 If you find a security issue, please report it privately (open a GitHub security advisory or contact the repository maintainer). Do not file public issues for exploitable vulnerabilities until a fix is available.
 
-## `sshd` (dev-only)
+## `telnetd` (dev-only)
 
-The `sshd` applet is **experimental and intended for local development only**. Do not expose it to untrusted networks or use it as a production SSH server.
+The `telnetd` applet is **experimental and intended for local development only**. It is enabled by default instead of `sshd` to keep the binary smaller. **Do not expose it to untrusted networks.**
+
+### Plaintext warning
+
+**All telnet traffic is unencrypted.** Usernames, passwords, shell input, and shell output travel in cleartext over the network. Anyone on the same network (or along the path) can read or modify sessions. Telnet provides **no confidentiality, integrity, or authentication of the remote peer** beyond a password check at login.
+
+Use telnet only on isolated lab networks, loopback, or serially bridged setups. For any network where eavesdropping is possible, use proper encrypted remote access (OpenSSH, VPN, serial console) instead.
+
+### Known limitations
+
+| Area | Risk |
+|------|------|
+| **Encryption** | **None.** Passwords and session data are sent in plaintext. |
+| **Scope** | Minimal telnet server: login prompt, PTY-backed interactive `rash` shell. No TLS wrapper. |
+| **Authentication** | Password-only via bcrypt hashes in `/etc/passwd` (same file as `passwd`). |
+| **Credentials** | Initrd template ships default dev account **`root` / `rustbox`**. Change or remove before any real use. |
+| **Brute force** | Up to **3 login attempts** per connection; no IP-based rate limiting. |
+| **Binding** | Defaults to `0.0.0.0:23` (all interfaces). Restrict with `listen` in `/etc/telnetd.conf` or firewall rules. |
+| **Shell access** | Successful login runs interactive `rash` on a PTY with the privileges of the `telnetd` process (typically root in initrd images). |
+
+### Default dev credentials
+
+When using the initrd template (or a passwd file generated from it), the default login is:
+
+| Field | Value |
+|-------|-------|
+| Username | `root` |
+| Password | `rustbox` |
+
+These credentials are for local development and QEMU images only.
+
+### Hardening checklist (if you must run `telnetd`)
+
+1. Bind to loopback (`listen 127.0.0.1`) or block port 23 on untrusted interfaces.
+2. Change default passwords with `passwd` after first login.
+3. Disable `telnetd` in `applets.json` for production images.
+4. Never use telnet across the public Internet or untrusted LANs.
+
+## `sshd` (dev-only, optional)
+
+The `sshd` applet is **experimental and intended for local development only**. It is **disabled by default** in [`applets.json`](../applets.json) and requires the `applet-sshd` Cargo feature. Do not expose it to untrusted networks or use it as a production SSH server.
 
 ### Known limitations
 
@@ -39,7 +79,7 @@ The password is stored as a bcrypt hash in field 2 of `initrd/template/etc/passw
 1. Set `listen` to loopback or a trusted management network, or block port 22 with a firewall on untrusted interfaces.
 2. Use strong, unique passwords and bcrypt hashes in `/etc/passwd`, or run `passwd` after login to rotate credentials.
 3. Rotate `/etc/sshd_host_key` if it may have been disclosed.
-4. Disable `sshd` in `applets.json` and omit `--features applet-sshd` for production builds unless you accept the risks above.
+4. Disable `sshd` in `applets.json` and omit `--features applet-sshd` for production builds unless you accept the risks above. (`sshd` is off by default.)
 5. Prefer proper SSH infrastructure (OpenSSH, VPN, serial console) for production remote access.
 
 ## `mdev`
@@ -88,7 +128,7 @@ HTTPS support in `wget` is enabled by default (`wget-tls` feature). Disable with
 
 - RustBox runs many applets with elevated privileges in typical initrd setups (PID 1, root). Compromise of any applet may compromise the entire system.
 - Static musl binaries reduce dynamic-linker attack surface but do not eliminate memory-safety or logic bugs in `unsafe` syscall paths (network, PTY, fork/exec).
-- Review `applets.json` before shipping: disable applets you do not need to shrink attack surface and binary size.
+- Review `applets.json` before shipping: disable applets you do not need (especially `telnetd` and optional `sshd`) to shrink attack surface and binary size.
 
 ## Dependency audit
 

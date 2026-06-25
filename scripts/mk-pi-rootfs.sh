@@ -75,7 +75,8 @@ stage_rootfs() {
         etc/passwd \
         etc/group \
         etc/mdev.conf \
-        etc/sshd.conf; do
+        etc/sshd.conf \
+        etc/telnetd.conf; do
         if [[ -f "$INITRD_TEMPLATE/$rel" ]]; then
             install -D -m 0644 "$INITRD_TEMPLATE/$rel" "$STAGING/$rel"
         fi

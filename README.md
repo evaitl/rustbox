@@ -31,8 +31,8 @@ Only listed applets are built; omitted applets default to disabled. Rebuild afte
 
 | Category | Applets |
 |----------|---------|
-| **Enabled** (78 names) | All utilities in the table below, including `sshd` |
-| **Disabled** | none in the default config |
+| **Enabled** (78 names) | All utilities in the table below, including `telnetd` |
+| **Disabled** | `sshd` (optional; enable in `applets.json` with `--features applet-sshd`) |
 | **Aliases** | `sh` → `rash`, `[` → `test` (separate dispatch entries, one implementation each) |
 
 **Cargo features** (see [`Cargo.toml`](Cargo.toml)):
@@ -41,10 +41,10 @@ Only listed applets are built; omitted applets default to disabled. Rebuild afte
 |---------|---------|----------|
 | `applet-dig` | yes | `dig` (`simple-dns`) |
 | `applet-dnscached` | yes | `dnscached`, TLS/DoH (`rustls`, `simple-dns`) |
-| `applet-sshd` | yes | `sshd` (`russh`, `tokio`, `bcrypt`) |
+| `applet-sshd` | no | `sshd` (`russh`, `tokio`, `bcrypt`) |
 | `wget-tls` | yes | HTTPS in `wget` |
 
-Network daemons (`dnscached`, `thttpd`, `syslogd`, `udhcpc`, `mdev`, `sshd`) and network utilities (`dig`, `logger`, `nc`, `ntpclient`, `ping`, `wget`, …) are Linux-only. Initrd images use [`initrd/template/etc/inittab`](initrd/template/etc/inittab) (`syslogd`, `dnscached`, `thttpd`, `mdev`, `sshd`, `rash`).
+Network daemons (`dnscached`, `thttpd`, `syslogd`, `udhcpc`, `mdev`, `telnetd`) and network utilities (`dig`, `logger`, `nc`, `ntpclient`, `ping`, `wget`, …) are Linux-only. Initrd images use [`initrd/template/etc/inittab`](initrd/template/etc/inittab) (`syslogd`, `dnscached`, `thttpd`, `mdev`, `telnetd`, `rash`).
 
 Use a different config path with the `RUSTBOX_APPLETS_CONFIG` environment variable:
 
@@ -54,7 +54,7 @@ RUSTBOX_APPLETS_CONFIG=applets.min.json cargo build --release
 
 ### Binary size (static musl)
 
-With the default [`applets.json`](applets.json) (all listed applets enabled), a **stripped release** build for **`x86_64-unknown-linux-musl`** is about **5.8 MiB** (**~6,070,000 bytes**; `sshd` and other default features dominate). This is the same static binary [`mkinitrd.sh`](scripts/mkinitrd.sh) uses when the musl target is installed.
+With the default [`applets.json`](applets.json) (78 applets enabled, `sshd` off), a **stripped release** build for **`x86_64-unknown-linux-musl`** is about **2.6 MiB** (**~2,720,000 bytes**). Enable `sshd` in `applets.json` with `--features applet-sshd` to add ~3.3 MiB. This is the same static binary [`mkinitrd.sh`](scripts/mkinitrd.sh) uses when the musl target is installed.
 
 Build conditions:
 
@@ -188,7 +188,8 @@ See **[APPLETS.md](docs/APPLETS.md)** for usage, command-line options, and exit 
 | `sync` | Flush filesystem buffers |
 | `sysctl` | Read/write kernel parameters (`-a`, `-n`, `key=value`) |
 | `syslogd` | Syslog daemon on `/dev/log` (`-f`, `-O`, `-s`) |
-| `sshd` | **Dev-only** — SSH server (on by default; see [SECURITY.md](docs/SECURITY.md)) |
+| `sshd` | **Dev-only, optional** — SSH server (off by default; `--features applet-sshd`; see [SECURITY.md](docs/SECURITY.md)) |
+| `telnetd` | **Dev-only** — plaintext telnet login server (on by default; see [SECURITY.md](docs/SECURITY.md)) |
 | `su` | Drop privileges and run a command or shell as another user (`-c`, `-s`, `-l`) |
 | `tail` | Print last lines (`-n`) |
 | `top` | Process snapshot sorted by RSS (`-n`, `-d`) |
@@ -247,11 +248,27 @@ ttyUSB*            0:0         666
 
 Lines are `pattern uid:gid mode` with optional `=alias` symlink in `/dev`. Patterns support `*`, `?`, and `[a-z]`; the **last** matching rule wins. With devtmpfs, nodes usually exist already; mdev sets ownership/mode and handles devices added after boot (for example USB storage or serial).
 
-### `sshd` configuration (dev-only)
+### `telnetd` configuration (dev-only)
+
+**All telnet traffic is unencrypted** — usernames, passwords, and shell sessions are sent in plaintext. See [SECURITY.md](docs/SECURITY.md).
+
+Enabled in default [`applets.json`](applets.json). Requires bcrypt credentials in `/etc/passwd` (same format as `passwd` / optional `sshd`).
+
+Config path: `/etc/telnetd.conf`:
+
+```text
+listen 0.0.0.0
+port 23
+passwd /etc/passwd
+```
+
+Connect with any telnet client: `telnet <host> 23` (default dev account `root` / `rustbox` in the initrd template).
+
+### `sshd` configuration (dev-only, optional)
 
 Failed password attempts are rate-limited to **3 per client IP per minute**. See [SECURITY.md](docs/SECURITY.md) for limitations and hardening guidance.
 
-Enabled in default [`applets.json`](applets.json) and [`Cargo.toml`](Cargo.toml) (`applet-sshd` feature). Disable either to omit the applet from the binary.
+Disabled in default [`applets.json`](applets.json). Enable the applet and build with `--features applet-sshd` to include it (~3.3 MiB marginal).
 
 Credentials come only from `/etc/passwd` (default path for `sshd` and `passwd`). Bcrypt hashes live in the password field (field 2). RustBox is not a multi-user desktop system: there is **no `/etc/shadow`**; login passwords are stored directly in `/etc/passwd`. Service accounts (`http`, `dnscache`, …) use `x` in field 2 and cannot log in via SSH. There are **no built-in usernames or passwords**; if the file is missing, unreadable, or has no valid bcrypt entries, `sshd` refuses to start.
 

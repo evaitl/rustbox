@@ -122,6 +122,8 @@ pub mod sysctl;
 pub mod syslogd;
 #[cfg(applet_tail)]
 pub mod tail;
+#[cfg(all(applet_telnetd, target_os = "linux"))]
+pub mod telnetd;
 #[cfg(applet_test)]
 pub mod test_;
 #[cfg(all(applet_thttpd, target_os = "linux"))]

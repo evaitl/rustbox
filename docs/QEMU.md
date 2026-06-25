@@ -165,7 +165,7 @@ Boot sequence from [`initrd/template/etc/inittab`](../initrd/template/etc/initta
 
 1. **sysinit** — mount `proc`, `sysfs`, `devtmpfs`, `devpts`; `mdev -s`; create `/var/log`; run `setup-ping-range`; bring up `lo`; set hostname from `/etc/hostname`; start `syslogd`, `dnscached`, and `thttpd`.
 2. **wait** — run [`sbin/smoke-test`](../initrd/template/sbin/smoke-test) via `run-smoke-test` (halts the VM on failure).
-3. **respawn** — `mdev -df` (USB hotplug), `sshd -f`, and an interactive `rash` shell on the serial console.
+3. **respawn** — `mdev -df` (USB hotplug), `telnetd -f`, and an interactive `rash` shell on the serial console.
 
 ### Shell initrd (`initrd-shell.img`)
 

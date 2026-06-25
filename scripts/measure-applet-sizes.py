@@ -62,6 +62,7 @@ GROUPS: list[tuple[str, list[str]]] = [
     ("sed", ["sed"]),
     ("sleep", ["sleep"]),
     ("sshd", ["sshd"]),
+    ("telnetd", ["telnetd"]),
     ("su", ["su"]),
     ("sort", ["sort"]),
     ("stat", ["stat"]),

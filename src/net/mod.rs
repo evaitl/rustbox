@@ -28,5 +28,7 @@ pub mod route;
 pub mod sshd;
 #[cfg(target_os = "linux")]
 pub mod syslog;
+#[cfg(all(applet_telnetd, target_os = "linux"))]
+pub mod telnetd;
 #[cfg(feature = "tls")]
 pub mod tls;

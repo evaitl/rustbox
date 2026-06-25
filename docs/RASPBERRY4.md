@@ -134,7 +134,7 @@ Cross-compiles RustBox for `aarch64-unknown-linux-musl` and populates `pi4/stagi
 - `/etc/inittab` from [`pi4/template/etc/inittab`](../pi4/template/etc/inittab)
 - Config and web content from [`initrd/template/`](../initrd/template/) (`passwd`, `thttpd.conf`, `dnscached.conf`, `/var/www`, …)
 
-Boot sequence (see inittab): mount `proc`/`sys`, `mdev`, loopback, `udhcpc` on onboard `eth0`, then background `dnscached`, `thttpd`, `sshd`, and `rash -i` on `tty1` (HDMI + USB keyboard).
+Boot sequence (see inittab): mount `proc`/`sys`, `mdev`, loopback, `udhcpc` on onboard `eth0`, then background `dnscached`, `thttpd`, `telnetd`, and `rash -i` on `tty1` (HDMI + USB keyboard).
 
 `mk-pi-rootfs.sh` downloads an aarch64 musl cross linker from [musl.cc](https://musl.cc) when `aarch64-linux-musl-gcc` is not on `PATH` (disable with `PI_MUSL_AUTO_FETCH=0`).
 
@@ -187,7 +187,7 @@ Or use [Raspberry Pi Imager](https://www.raspberrypi.com/software/) → “Use c
 3. Connect **Ethernet** to a network with DHCP.
 4. Connect **USB-C power**.
 
-You should see `rustbox pi4 ready` on the HDMI display, then a `rash` prompt. Only `rash` is attached to `tty1`; `thttpd`, `sshd`, and `dnscached` run in the background.
+You should see `rustbox pi4 ready` on the HDMI display, then a `rash` prompt. Only `rash` is attached to `tty1`; `thttpd`, `telnetd`, and `dnscached` run in the background.
 
 ### Access
 
@@ -195,7 +195,7 @@ You should see `rustbox pi4 ready` on the HDMI display, then a `rash` prompt. On
 |--------|-----|
 | HDMI + USB keyboard | `rash` shell on `tty1` (root, no password) |
 | HTTP | `http://<pi-ip>/` (`thttpd`, port 80) |
-| SSH | `sshd` on port 22 (default dev account `root`/`rustbox`; see [SECURITY.md](SECURITY.md)) |
+| Telnet | `telnetd` on port 23 — **plaintext** (default dev account `root`/`rustbox`; see [SECURITY.md](SECURITY.md)) |
 
 Get the Pi’s IP from your router DHCP list, or on the HDMI shell run `ifconfig eth0`.
 
@@ -242,4 +242,4 @@ sudo ./scripts/mk-pi-image.sh
 
 - [QEMU.md](QEMU.md) — x86_64 initramfs development image
 - [README.md](../README.md) — RustBox build and applet configuration
-- [SECURITY.md](SECURITY.md) — `thttpd`, `dnscached`, `sshd` exposure notes
+- [SECURITY.md](SECURITY.md) — `thttpd`, `dnscached`, `telnetd` exposure notes

@@ -58,6 +58,7 @@ const KNOWN_APPLETS: &[(&str, &str, &str)] = &[
     ("sh", "sh", "sh"),
     ("sleep", "sleep", "sleep"),
     ("sshd", "sshd", "sshd"),
+    ("telnetd", "telnetd", "telnetd"),
     ("su", "su", "su"),
     ("sort", "sort", "sort"),
     ("stat", "stat_", "stat"),
@@ -124,6 +125,13 @@ fn main() {
                 panic!(
                     "dnscached is enabled in {} but Cargo feature 'applet-dnscached' is disabled; \
                      enable it in Cargo.toml or pass --features applet-dnscached",
+                    config_path.display()
+                );
+            }
+            if *name == "telnetd" && env::var("CARGO_FEATURE_APPLET_PASSWD").is_err() {
+                panic!(
+                    "telnetd is enabled in {} but Cargo feature 'applet-passwd' is disabled; \
+                     enable it in Cargo.toml or pass --features applet-passwd",
                     config_path.display()
                 );
             }

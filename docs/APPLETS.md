@@ -8,15 +8,15 @@ Unless noted otherwise, operands are file or directory paths. Options must appea
 
 ### Applet index
 
-`basename`, `cat`, `chmod`, `chown`, `cp`, `cron`, `cut`, `date`, `dd`, `dig`, `dirname`, `dnscached`, `dmesg`, `echo`, `env`, `false`, `find`, `free`, `grep`, `halt`, `head`, `hostname`, `ifconfig`, `init`, `kill`, `killall`, `ln`, `logger`, `ls`, `mkdir`, `mdev`, `mknod`, `mount`, `mv`, `nc`, `ntpclient`, `passwd`, `ping`, `pivot_root`, `printenv`, `printf`, `ps`, `pwd`, `rash`, `readlink`, `reboot`, `rm`, `rmdir`, `route`, `sed`, `sleep`, `sort`, `sshd`, `stat`, `su`, `switch_root`, `swapoff`, `swapon`, `sync`, `sysctl`, `syslogd`, `tail`, `test`, `thttpd`, `top`, `tr`, `true`, `udhcpc`, `umount`, `uptime`, `uname`, `vi`, `wc`, `wget`, `xargs`.
+`basename`, `cat`, `chmod`, `chown`, `cp`, `cron`, `cut`, `date`, `dd`, `dig`, `dirname`, `dnscached`, `dmesg`, `echo`, `env`, `false`, `find`, `free`, `grep`, `halt`, `head`, `hostname`, `ifconfig`, `init`, `kill`, `killall`, `ln`, `logger`, `ls`, `mkdir`, `mdev`, `mknod`, `mount`, `mv`, `nc`, `ntpclient`, `passwd`, `ping`, `pivot_root`, `printenv`, `printf`, `ps`, `pwd`, `rash`, `readlink`, `reboot`, `rm`, `rmdir`, `route`, `sed`, `sleep`, `sort`, `sshd`, `stat`, `su`, `switch_root`, `swapoff`, `swapon`, `sync`, `sysctl`, `syslogd`, `tail`, `telnetd`, `test`, `thttpd`, `top`, `tr`, `true`, `udhcpc`, `umount`, `uptime`, `uname`, `vi`, `wc`, `wget`, `xargs`.
 
 (`sh` is an alias for `rash`; `[` is an alias for `test`.)
 
-**Build status** (default [`applets.json`](../applets.json)): 78 names enabled (all listed applets). `dig` requires `applet-dig` (`simple-dns`). `dnscached`, `passwd`, `sshd`, and `wget` HTTPS require the default Cargo features `applet-dig`, `applet-dnscached`, `applet-passwd`, `applet-sshd`, and `wget-tls`. See [SECURITY.md](SECURITY.md) for `sshd`, `dnscached`, and `thttpd` exposure notes. The `vi` editor is documented in [VI.md](VI.md).
+**Build status** (default [`applets.json`](../applets.json)): 78 names enabled (`sshd` disabled). `dig` requires `applet-dig` (`simple-dns`). `dnscached`, `passwd`, `telnetd`, and `wget` HTTPS require the default Cargo features `applet-dig`, `applet-dnscached`, `applet-passwd`, and `wget-tls`. Optional `sshd` requires `applet-sshd`. See [SECURITY.md](SECURITY.md) for `telnetd`, optional `sshd`, `dnscached`, and `thttpd` exposure notes. The `vi` editor is documented in [VI.md](VI.md).
 
 ### Binary size notes
 
-Marginal sizes are measured by comparing a stripped release build for `x86_64-unknown-linux-musl` with all default applets enabled (~6,182,224 bytes) against the same build with that applet disabled. Values are rounded to the nearest KiB. Because of 4 KiB page alignment and shared code between applets, marginal costs do not sum exactly to the full binary size. Applets marked ~0 KiB still add dispatch-table entries but little or no unique code. Regenerate with [`scripts/measure-applet-sizes.py`](../scripts/measure-applet-sizes.py) and [`scripts/patch-applet-sizes-doc.py`](../scripts/patch-applet-sizes-doc.py).
+Marginal sizes are measured by comparing a stripped release build for `x86_64-unknown-linux-musl` with all default applets enabled (~2,720,448 bytes) against the same build with that applet disabled. Values are rounded to the nearest KiB. Because of 4 KiB page alignment and shared code between applets, marginal costs do not sum exactly to the full binary size. Applets marked ~0 KiB still add dispatch-table entries but little or no unique code. Regenerate with [`scripts/measure-applet-sizes.py`](../scripts/measure-applet-sizes.py) and [`scripts/patch-applet-sizes-doc.py`](../scripts/patch-applet-sizes-doc.py).
 
 ---
 
@@ -73,7 +73,7 @@ None.
 ---
 
 ## `chmod`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Change file mode bits.
 
@@ -99,7 +99,7 @@ chmod [-R] MODE FILE...
 ---
 
 ## `chown`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Change file owner and group.
 
@@ -125,7 +125,7 @@ chown [-R] OWNER[:[GROUP]] FILE...
 ---
 
 ## `cp`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Copy files and directories.
 
@@ -151,7 +151,7 @@ When copying multiple sources, `DEST` must be a directory. For a single director
 ---
 
 ## `cron`
-**Approximate binary size** — ~20 KiB marginal.
+**Approximate binary size** — ~12 KiB marginal.
 
 Run commands on a schedule in local time.
 
@@ -209,7 +209,7 @@ With no `FILE` operands, reads stdin. Each selected field is printed on its own 
 ---
 
 ## `date`
-**Approximate binary size** — ~8 KiB marginal.
+**Approximate binary size** — ~4 KiB marginal.
 
 Print or format the current date and time.
 
@@ -315,7 +315,7 @@ dig [@server] [-p port] [-t type] [-x] name
 ---
 
 ## `dnscached`
-**Approximate binary size** — ~24 KiB marginal.
+**Approximate binary size** — ~16 KiB marginal.
 
 DNS caching resolver on UDP port 53. Forwards queries to configured DNS-over-HTTPS upstreams. **Enabled** in default [`applets.json`](../applets.json).
 
@@ -407,7 +407,7 @@ With no strings, prints a blank line (unless `-n` is set).
 ---
 
 ## `env`
-**Approximate binary size** — ~8 KiB marginal.
+**Approximate binary size** — ~4 KiB marginal.
 
 Run a command in a modified environment, or print the environment.
 
@@ -509,7 +509,7 @@ free [-h]
 ---
 
 ## `grep`
-**Approximate binary size** — ~20 KiB marginal.
+**Approximate binary size** — ~12 KiB marginal.
 
 Search for lines matching a pattern.
 
@@ -575,7 +575,7 @@ Requires sufficient privileges. On non-Linux platforms, prints an error and exit
 ---
 
 ## `head`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Print the first lines of files.
 
@@ -699,7 +699,7 @@ The `command` field is split on whitespace (like `exec` with separate arguments)
 ---
 
 ## `kill`
-**Approximate binary size** — ~12 KiB marginal.
+**Approximate binary size** — ~4 KiB marginal.
 
 Send signals to processes.
 
@@ -726,7 +726,7 @@ kill [-l] [-s SIG | -SIG] [-0] PID...
 ---
 
 ## `killall`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Send a signal to processes whose `/proc/PID/comm` name matches.
 
@@ -751,7 +751,7 @@ killall [-s SIG | -SIG] NAME...
 ---
 
 ## `ln`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Create hard or symbolic links.
 
@@ -857,7 +857,7 @@ mkdir [-p] DIRECTORY...
 ---
 
 ## `mknod`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Create a block or character special file, or a FIFO.
 
@@ -892,7 +892,7 @@ FIFOs (`p`) do not take major/minor numbers.
 ---
 
 ## `mdev`
-**Approximate binary size** — ~24 KiB marginal.
+**Approximate binary size** — ~20 KiB marginal.
 
 Minimal device manager for embedded Linux (Linux only). Scans sysfs, applies `/etc/mdev.conf` rules, and optionally listens for kernel uevents (USB hotplug). **Enabled** in default [`applets.json`](../applets.json). The initrd runs `mdev -s` at boot and respawns `mdev -df`.
 
@@ -932,7 +932,7 @@ With **devtmpfs**, device nodes are usually created by the kernel; mdev sets mod
 ---
 
 ## `mount`
-**Approximate binary size** — ~16 KiB marginal.
+**Approximate binary size** — ~12 KiB marginal.
 
 Mount filesystems or list mounts.
 
@@ -970,7 +970,7 @@ With two operands, mounts `SOURCE` on `TARGET`.
 ---
 
 ## `mv`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Move or rename files.
 
@@ -1318,7 +1318,7 @@ Resolved via `PATH` (default `/usr/bin:/bin`) or directly when the name contains
 ---
 
 ## `readlink`
-**Approximate binary size** — ~20 KiB marginal.
+**Approximate binary size** — ~12 KiB marginal.
 
 Print symbolic link values.
 
@@ -1397,7 +1397,7 @@ rm [-rf] FILE...
 ---
 
 ## `rmdir`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Remove empty directories.
 
@@ -1421,7 +1421,7 @@ rmdir [-p] DIRECTORY...
 ---
 
 ## `route`
-**Approximate binary size** — ~8 KiB marginal.
+**Approximate binary size** — ~4 KiB marginal.
 
 Display or modify the IPv4 routing table (netlink on Linux, with `/proc/net/route` fallback for display).
 
@@ -1443,7 +1443,7 @@ route add default gw GATEWAY [dev IFACE]
 ---
 
 ## `sed`
-**Approximate binary size** — ~12 KiB marginal.
+**Approximate binary size** — ~8 KiB marginal.
 
 Stream editor for filtering and transforming text.
 
@@ -1504,9 +1504,9 @@ None.
 ---
 
 ## `sshd`
-**Approximate binary size** — ~3389 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
-Experimental SSH server for **local development only**. Enabled in default [`applets.json`](../applets.json) and `applet-sshd` Cargo feature. See [SECURITY.md](SECURITY.md).
+Experimental SSH server for **local development only**. Disabled in default [`applets.json`](../applets.json); enable the applet and `applet-sshd` Cargo feature to build it. See [SECURITY.md](SECURITY.md).
 
 **Usage**
 
@@ -1536,8 +1536,40 @@ The initrd template ships a default dev login of **`root` / `rustbox`** (see [SE
 
 ---
 
+## `telnetd`
+**Approximate binary size** — ~8 KiB marginal.
+
+Experimental **plaintext** telnet server for **local development only**. Enabled in default [`applets.json`](../applets.json). See [SECURITY.md](SECURITY.md).
+
+**Usage**
+
+```text
+telnetd [-f] [-c CONFIG] [-l ADDR] [-p PORT] [-P PASSWD]
+```
+
+**Options**
+
+| Option | Description |
+|--------|-------------|
+| `-f` | Run in foreground |
+| `-c CONFIG` | Config file (default: `/etc/telnetd.conf`) |
+| `-l ADDR` | Listen address (default: `0.0.0.0`) |
+| `-p PORT` | Listen port (default: `23`) |
+| `-P PASSWD` | Passwd file path (default: `/etc/passwd`) |
+| `-h`, `--help` | Print usage and exit 0 |
+
+Password-only authentication (bcrypt hashes in passwd file). After login, runs interactive `rash -i` on a PTY (fork per connection; no tokio).
+
+The initrd template ships a default dev login of **`root` / `rustbox`** (see [SECURITY.md](SECURITY.md)).
+
+**Exit status**
+
+- `0` — success (server runs until killed)
+- `1` — missing credentials, invalid option, or startup error
+
+---
+
 ## `passwd`
-**Approximate binary size** — not yet measured (shares `bcrypt` with `sshd` when both are enabled).
 
 Change bcrypt password hashes in `/etc/passwd` (default). Enabled with the `applet-passwd` Cargo feature.
 
@@ -1564,7 +1596,7 @@ Non-root users may change only their own password and must enter the current pas
 ---
 
 ## `su`
-**Approximate binary size** — ~12 KiB marginal.
+**Approximate binary size** — ~8 KiB marginal.
 
 Switch to another user ID and execute a command or login shell. Intended for init scripts and daemons started as root that need to drop privileges.
 
@@ -1601,7 +1633,7 @@ su daemon /bin/syslogd -f -O /var/log/messages
 ---
 
 ## `sort`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Sort lines of text.
 
@@ -1628,7 +1660,7 @@ With no `FILE` operands, reads stdin.
 ---
 
 ## `stat`
-**Approximate binary size** — ~8 KiB marginal.
+**Approximate binary size** — ~4 KiB marginal.
 
 Print file status.
 
@@ -1657,7 +1689,7 @@ By default, symlinks are not followed. Without `-c`, prints a multi-line summary
 ---
 
 ## `swapoff`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Deactivate swap on a device or file.
 
@@ -1725,7 +1757,7 @@ Calls `sync(2)`. No options.
 ---
 
 ## `sysctl`
-**Approximate binary size** — ~8 KiB marginal.
+**Approximate binary size** — ~4 KiB marginal.
 
 Read or write kernel parameters via `/proc/sys`.
 
@@ -1779,7 +1811,7 @@ syslogd [-f] [-O LOG] [-s SOCKET]
 ---
 
 ## `switch_root`
-**Approximate binary size** — ~12 KiB marginal.
+**Approximate binary size** — ~8 KiB marginal.
 
 Switch the root filesystem from an initramfs to a mounted real root, then execute `init`. See [Choosing `pivot_root` vs `switch_root`](#choosing-pivot_root-vs-switch_root) for when to prefer this over `pivot_root`.
 
@@ -1837,7 +1869,7 @@ With no `FILE` operands, reads stdin.
 ---
 
 ## `top`
-**Approximate binary size** — ~16 KiB marginal.
+**Approximate binary size** — ~8 KiB marginal.
 
 Display a periodically refreshed process list sorted by RSS (Linux `/proc`).
 
@@ -1862,7 +1894,7 @@ top [-n COUNT] [-d SEC]
 ---
 
 ## `test`
-**Approximate binary size** — ~172 KiB marginal. `[` is an alias for the same module; required when `rash`/`sh` is enabled.
+**Approximate binary size** — ~176 KiB marginal. `[` is an alias for the same module; required when `rash`/`sh` is enabled.
 
 Evaluate expression and exit with a status (also available as `[`).
 
@@ -1920,7 +1952,7 @@ A lone operand is true if the string is non-empty.
 ---
 
 ## `thttpd`
-**Approximate binary size** — ~40 KiB marginal.
+**Approximate binary size** — ~36 KiB marginal.
 
 Small HTTP server with CGI/1.1 support. Reads `/etc/thttpd.conf` by default. Accepts connections concurrently by forking a child process per client; CGI scripts are executed in a separate fork from the connection handler. When `index.html` is missing for a directory request, serves the output of `ls -al` on that directory (fork/exec of `/bin/ls`).
 
@@ -2012,7 +2044,7 @@ None.
 ---
 
 ## `udhcpc`
-**Approximate binary size** — ~12 KiB marginal.
+**Approximate binary size** — ~4 KiB marginal.
 
 Minimal DHCP client for a single interface.
 
@@ -2043,7 +2075,7 @@ A positional `IFACE` overrides `-i`.
 ---
 
 ## `umount`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Unmount filesystems.
 
@@ -2070,7 +2102,7 @@ umount [-afl] [MOUNTPOINT]...
 ---
 
 ## `uptime`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Print how long the system has been running and load averages.
 
@@ -2090,7 +2122,7 @@ Reads `/proc/uptime` and `/proc/loadavg`. No options.
 ---
 
 ## `uname`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Print system information from `/proc/sys/kernel/*`.
 
@@ -2120,7 +2152,7 @@ With no options, prints the operating system name only (same source as `-s`). Mu
 ---
 
 ## `vi`
-**Approximate binary size** — ~36 KiB marginal.
+**Approximate binary size** — ~40 KiB marginal.
 
 Small full-screen text editor for VT100-compatible terminals. This is not a complete vi clone; supported commands, modes, key scripts, and limitations are listed in **[VI.md](VI.md)**.
 
@@ -2148,7 +2180,7 @@ Interactive mode requires stdin and stdout to be terminals. The applet uses raw 
 ---
 
 ## `wc`
-**Approximate binary size** — ~8 KiB marginal.
+**Approximate binary size** — ~4 KiB marginal.
 
 Print newline, word, and byte counts.
 
@@ -2176,7 +2208,7 @@ With no count options, all three are printed. With no `FILE` operands, reads std
 ---
 
 ## `wget`
-**Approximate binary size** — ~4 KiB marginal.
+**Approximate binary size** — ~0 KiB marginal.
 
 Download a file over HTTP/1.0 (GET only). IPv4 literal hosts are supported.
 
