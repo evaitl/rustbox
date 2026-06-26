@@ -108,6 +108,40 @@ KERNEL=/path/to/vmlinuz ./scripts/qemu-smoke.sh
 | `SMOKE_TIMEOUT` | `60` | Host wall-clock limit if `smoke: ok` never appears; guest `smoke-test` uses the same default |
 | `SMOKE_LOG` | `initrd/qemu-smoke.log` | QEMU serial output log |
 
+## QEMU soak test
+
+Long-running stability test: boots the same initrd as smoke, waits for `smoke: ok`, then keeps QEMU running while [`sbin/soak-loop`](../initrd/template/sbin/soak-loop) exercises `wget`, `dig`, and `ping` every 30 seconds. Each guest heartbeat prints guest `mem_used_kb` (from `/proc/meminfo`) and per-daemon RSS (`thttpd`, `dnscached`, `syslogd` via `/proc/*/cmdline` + `VmRSS`).
+
+The host script [`scripts/qemu-soak.sh`](../scripts/qemu-soak.sh) checks every **15 minutes** (default) for:
+
+- **Hangs** — no new `soak: heartbeat` lines since the previous check; QEMU process still alive
+- **Memory leaks** — guest `mem_used_kb` growth vs. baseline (`LEAK_TOTAL_KB`, default 32 MiB) or sustained step growth (`LEAK_STEP_KB` × `LEAK_FAIL_CONSEC`)
+
+```bash
+# Default: 12 hours, 15-minute checks
+./scripts/qemu-soak.sh
+
+# Shorter local run
+SOAK_DURATION=3600 CHECK_INTERVAL=300 ./scripts/qemu-soak.sh
+```
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SOAK_DURATION` | `43200` (12h) | Total soak time after `smoke: ok` |
+| `CHECK_INTERVAL` | `900` (15m) | Hang/leak check period |
+| `BOOT_TIMEOUT` | `600` | Wait for `smoke: ok` |
+| `LEAK_TOTAL_KB` | `32768` | Fail if guest used memory grows this much above baseline |
+| `LEAK_STEP_KB` | `2048` | Per-check growth counted toward consecutive leak failures |
+| `LEAK_FAIL_CONSEC` | `3` | Fail after this many consecutive over-threshold steps |
+| `SOAK_LOG` | `initrd/qemu-soak.log` | QEMU serial output |
+| `SOAK_METRICS` | `initrd/qemu-soak.metrics` | Host check log (timestamps, memory deltas) |
+
+Run in the background for overnight soaks:
+
+```bash
+nohup ./scripts/qemu-soak.sh > /tmp/qemu-soak-host.log 2>&1 &
+```
+
 ## Full workflow (dedicated kernel + initrd)
 
 From the repository root:

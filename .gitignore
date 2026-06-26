@@ -11,6 +11,9 @@
 /kernel/*.tar.xz
 /kernel/*.tar.gz
 /initrd/qemu-smoke.log
+/initrd/qemu-soak.log
+/initrd/qemu-soak.metrics
+/initrd/qemu-soak.watchdog
 /pi4/staging/
 /pi4/sdcard.img
 /kernel/pi/

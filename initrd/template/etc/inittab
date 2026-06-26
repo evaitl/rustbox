@@ -13,6 +13,7 @@
 ::sysinit:/bin/thttpd
 ::sysinit:/bin/echo rustbox initrd ready - type commands at the shell
 ::wait:/sbin/run-smoke-test
+::respawn:/sbin/soak-loop
 ::respawn:/bin/mdev -df
 ::respawn:/bin/telnetd -f
 ::respawn:/bin/rash

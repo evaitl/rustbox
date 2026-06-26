@@ -7,6 +7,7 @@ use std::os::fd::RawFd;
 
 const AF_INET: u8 = 2;
 const RTM_NEWROUTE: u16 = 24;
+const RTM_DELROUTE: u16 = 25;
 const RTN_UNICAST: u8 = 2;
 const RTPROT_STATIC: u8 = 4;
 const RT_SCOPE_UNIVERSE: u8 = 0;
@@ -102,14 +103,43 @@ fn wait_ack(fd: RawFd, seq: u32) -> Result<()> {
 }
 
 pub fn add_route(dst: u32, dst_len: u8, gateway: Option<u32>, dev: Option<&str>) -> Result<()> {
+    send_route(
+        RTM_NEWROUTE,
+        NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
+        dst,
+        dst_len,
+        gateway,
+        dev,
+    )
+}
+
+pub fn del_route(dst: u32, dst_len: u8, gateway: Option<u32>, dev: Option<&str>) -> Result<()> {
+    send_route(
+        RTM_DELROUTE,
+        NLM_F_REQUEST | NLM_F_ACK,
+        dst,
+        dst_len,
+        gateway,
+        dev,
+    )
+}
+
+fn send_route(
+    msg_type: u16,
+    msg_flags: u16,
+    dst: u32,
+    dst_len: u8,
+    gateway: Option<u32>,
+    dev: Option<&str>,
+) -> Result<()> {
     let fd = netlink_socket()?;
     let seq = 1u32;
     let mut buf: Vec<u8> = Vec::new();
 
     let hdr = NlMsgHdr {
         nlmsg_len: 0,
-        nlmsg_type: RTM_NEWROUTE,
-        nlmsg_flags: NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
+        nlmsg_type: msg_type,
+        nlmsg_flags: msg_flags,
         nlmsg_seq: seq,
         nlmsg_pid: 0,
     };
@@ -153,8 +183,8 @@ pub fn add_route(dst: u32, dst_len: u8, gateway: Option<u32>, dev: Option<&str>)
     unsafe {
         *(buf.as_mut_ptr() as *mut NlMsgHdr) = NlMsgHdr {
             nlmsg_len: total,
-            nlmsg_type: RTM_NEWROUTE,
-            nlmsg_flags: NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
+            nlmsg_type: msg_type,
+            nlmsg_flags: msg_flags,
             nlmsg_seq: seq,
             nlmsg_pid: 0,
         };
@@ -238,17 +268,34 @@ pub fn add_default_gateway(gw: u32, dev: &str) -> Result<()> {
     add_route(0, 0, Some(gw), Some(dev))
 }
 
+pub fn del_default_gateway(gw: u32, dev: &str) -> Result<()> {
+    del_route(0, 0, Some(gw), Some(dev))
+}
+
 pub fn add_host_route(dst: u32, gw: Option<u32>, dev: Option<&str>) -> Result<()> {
     add_route(dst, 32, gw, dev)
 }
 
+pub fn del_host_route(dst: u32, gw: Option<u32>, dev: Option<&str>) -> Result<()> {
+    del_route(dst, 32, gw, dev)
+}
+
 pub fn add_net_route(dst: u32, mask: u32, gw: Option<u32>, dev: Option<&str>) -> Result<()> {
-    let len = if mask == 0 {
+    let len = prefix_len(mask);
+    add_route(dst, len, gw, dev)
+}
+
+pub fn del_net_route(dst: u32, mask: u32, gw: Option<u32>, dev: Option<&str>) -> Result<()> {
+    let len = prefix_len(mask);
+    del_route(dst, len, gw, dev)
+}
+
+fn prefix_len(mask: u32) -> u8 {
+    if mask == 0 {
         0
     } else {
         mask.count_ones() as u8
-    };
-    add_route(dst, len, gw, dev)
+    }
 }
 
 pub fn parse_route_target(s: &str, host: bool) -> Result<(u32, u8)> {

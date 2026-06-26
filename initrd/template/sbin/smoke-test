@@ -134,4 +134,5 @@ printf 'nc-ok\n' >/tmp/nc.reply
 nc -l -p "$NC_PORT" -w 5 </tmp/nc.reply || exit 1
 grep -q nc-ok /tmp/nc.out || exit 1
 
+: > /tmp/smoke-ok
 echo smoke: ok

@@ -78,6 +78,8 @@ The result is a single statically linked executable (no `libc.so` or dynamic lin
 
 ### Tests
 
+See **[TESTING.md](docs/TESTING.md)** for a full overview (CI checks, fuzzing, QEMU smoke/soak, and suggested workflows).
+
 ```bash
 cargo test
 ```

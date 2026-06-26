@@ -121,6 +121,9 @@ stage_rootfs() {
     if [[ -f "$TEMPLATE/sbin/run-smoke-test" ]]; then
         install -D -m 0755 "$TEMPLATE/sbin/run-smoke-test" "$STAGING/sbin/run-smoke-test"
     fi
+    if [[ -f "$TEMPLATE/sbin/soak-loop" ]]; then
+        install -D -m 0755 "$TEMPLATE/sbin/soak-loop" "$STAGING/sbin/soak-loop"
+    fi
     if [[ -f "$TEMPLATE/sbin/setup-ping-range" ]]; then
         install -D -m 0755 "$TEMPLATE/sbin/setup-ping-range" "$STAGING/sbin/setup-ping-range"
     fi

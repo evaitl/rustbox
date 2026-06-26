@@ -1,0 +1,62 @@
+#!/bin/rash
+# Periodic load + memory heartbeat for QEMU soak tests.
+
+if [ -z "$SOAK_HEARTBEAT_SEC" ]; then
+    SOAK_HEARTBEAT_SEC=30
+fi
+
+mem_used_kb() {
+    line=$(grep '^MemTotal:' /proc/meminfo)
+    set -- $line
+    total=$2
+    line=$(grep '^MemFree:' /proc/meminfo)
+    set -- $line
+    free_kb=$2
+    echo $((total - free_kb))
+}
+
+proc_rss_kb() {
+    needle=$1
+    total=0
+    for p in /proc/[0-9]*; do
+        if [ ! -f "$p/cmdline" ]; then
+            continue
+        fi
+        if ! grep -q "$needle" "$p/cmdline"; then
+            continue
+        fi
+        if [ ! -f "$p/status" ]; then
+            continue
+        fi
+        line=$(grep '^VmRSS:' "$p/status")
+        if [ -z "$line" ]; then
+            continue
+        fi
+        set -- $line
+        total=$((total + $2))
+    done
+    echo "$total"
+}
+
+echo soak: loop waiting for smoke
+while [ ! -f /tmp/smoke-ok ]; do
+    sleep 1
+done
+echo soak: loop start
+
+iter=0
+while true; do
+    epoch=$(date +%s)
+    mem=$(mem_used_kb)
+    thttpd_kb=$(proc_rss_kb thttpd)
+    dnscached_kb=$(proc_rss_kb dnscached)
+    syslogd_kb=$(proc_rss_kb syslogd)
+    echo "soak: heartbeat epoch=$epoch mem_used_kb=$mem thttpd_kb=$thttpd_kb dnscached_kb=$dnscached_kb syslogd_kb=$syslogd_kb iter=$iter"
+
+    wget -q -O /dev/null http://127.0.0.1/ || true
+    dig @127.0.0.1 example.com >/dev/null 2>&1 || true
+    ping -c 1 -W 2 -q 10.0.2.2 >/dev/null 2>&1 || true
+
+    iter=$((iter + 1))
+    sleep "$SOAK_HEARTBEAT_SEC"
+done

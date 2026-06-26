@@ -63,6 +63,28 @@ fn route_show_table() {
 }
 
 #[test]
+fn route_add_and_del_host() {
+    if !cfg!(target_os = "linux") || !has_net_admin() {
+        return;
+    }
+    let target = "192.0.2.1";
+    assert_eq!(
+        Rustbox::new()
+            .applet("route")
+            .args(["add", "-host", target, "dev", "lo"])
+            .status(),
+        0
+    );
+    assert_eq!(
+        Rustbox::new()
+            .applet("route")
+            .args(["del", "-host", target, "dev", "lo"])
+            .status(),
+        0
+    );
+}
+
+#[test]
 fn ping_localhost() {
     if !cfg!(target_os = "linux") || !has_net_admin() {
         return;

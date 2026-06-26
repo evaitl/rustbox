@@ -1431,9 +1431,11 @@ Display or modify the IPv4 routing table (netlink on Linux, with `/proc/net/rout
 route [-n]
 route add [-net|-host] TARGET [gw GATEWAY] [dev IFACE]
 route add default gw GATEWAY [dev IFACE]
+route del [-net|-host] TARGET [gw GATEWAY] [dev IFACE]
+route del default gw GATEWAY [dev IFACE]
 ```
 
-`route del` is not implemented. Legacy `route TARGET gw …` syntax is rejected; use `route add …`.
+Legacy `route TARGET gw …` syntax is rejected; use `route add …` or `route del …`.
 
 **Exit status**
 
