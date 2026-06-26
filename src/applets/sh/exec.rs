@@ -302,24 +302,35 @@ impl Shell {
                     0
                 }
             }
-            Command::While { cond, body } => loop {
-                if self.run_list(cond) != 0 {
-                    return 0;
-                }
-                self.loop_break = false;
-                self.loop_continue = false;
-                if self.run_list(body) != 0 && self.errexit {
-                    return self.last_status;
-                }
-                if self.loop_break {
+            Command::While { cond, body } => {
+                #[cfg(feature = "fuzzing")]
+                let mut loop_iter = 0u32;
+                loop {
+                    #[cfg(feature = "fuzzing")]
+                    {
+                        loop_iter += 1;
+                        if loop_iter > super::MAX_LOOP_ITER {
+                            return 0;
+                        }
+                    }
+                    if self.run_list(cond) != 0 {
+                        return 0;
+                    }
                     self.loop_break = false;
-                    return 0;
-                }
-                if self.loop_continue {
                     self.loop_continue = false;
-                    continue;
+                    if self.run_list(body) != 0 && self.errexit {
+                        return self.last_status;
+                    }
+                    if self.loop_break {
+                        self.loop_break = false;
+                        return 0;
+                    }
+                    if self.loop_continue {
+                        self.loop_continue = false;
+                        continue;
+                    }
                 }
-            },
+            }
             Command::For {
                 var,
                 items,
@@ -339,7 +350,16 @@ impl Shell {
                 } else {
                     self.positional[1..].to_vec()
                 };
+                #[cfg(feature = "fuzzing")]
+                let mut loop_iter = 0u32;
                 for value in values {
+                    #[cfg(feature = "fuzzing")]
+                    {
+                        loop_iter += 1;
+                        if loop_iter > super::MAX_LOOP_ITER {
+                            break;
+                        }
+                    }
                     self.set_var(var, value);
                     self.loop_break = false;
                     self.loop_continue = false;
@@ -448,6 +468,14 @@ impl Shell {
     }
 
     fn call_function(&mut self, body: &List, argv: &[String]) -> i32 {
+        if self.call_depth >= super::MAX_FUNCTION_DEPTH {
+            eprintln(format!(
+                "{SHELL_NAME}: maximum function call depth ({}) exceeded",
+                super::MAX_FUNCTION_DEPTH
+            ));
+            return 1;
+        }
+        self.call_depth += 1;
         let saved_positional = self.positional.clone();
         let mut new_pos = vec![argv[0].clone()];
         new_pos.extend(argv[1..].iter().cloned());
@@ -457,6 +485,7 @@ impl Shell {
         let status = self.run_list(body);
         self.pop_local_scope();
         self.positional = saved_positional;
+        self.call_depth -= 1;
         if let Some(ret) = self.return_status.take() {
             ret
         } else {
@@ -901,6 +930,23 @@ mod exec_tests {
         let mut shell = Shell::new();
         shell.positional = vec!["rash".into()];
         let status = shell.run_script("for x; do exit 42; done; exit 0");
+        assert_eq!(status, 0);
+    }
+
+    #[test]
+    fn function_call_depth_limit_does_not_overflow() {
+        let mut shell = Shell::new();
+        shell.set_var("PATH", String::new());
+        let status = shell.run_script("f() { f; }; f");
+        assert_eq!(status, 1);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn while_loop_iteration_limit_under_fuzzing() {
+        let mut shell = Shell::new();
+        shell.set_var("PATH", String::new());
+        let status = shell.run_script("while true; do :; done");
         assert_eq!(status, 0);
     }
 }

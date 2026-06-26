@@ -29,9 +29,13 @@ pub struct Shell {
     pub local_scopes: Vec<HashMap<String, String>>,
     pub return_status: Option<i32>,
     cmdsub_depth: u32,
+    call_depth: u32,
 }
 
 const MAX_CMDSUB_DEPTH: u32 = 128;
+pub(crate) const MAX_FUNCTION_DEPTH: u32 = 128;
+#[cfg(feature = "fuzzing")]
+pub(crate) const MAX_LOOP_ITER: u32 = 1000;
 
 impl Default for Shell {
     fn default() -> Self {
@@ -64,6 +68,7 @@ impl Shell {
             local_scopes: Vec::new(),
             return_status: None,
             cmdsub_depth: 0,
+            call_depth: 0,
         }
     }
 
