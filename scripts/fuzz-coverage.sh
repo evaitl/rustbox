@@ -34,10 +34,8 @@ need_cmd() {
 }
 
 setup_toolchain() {
-    # rustup shims can be silent no-ops in some environments; use the toolchain directly.
-    if [[ -d "${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin" ]]; then
-        export PATH="${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin:${PATH}"
-    fi
+    # shellcheck source=scripts/fuzz-env.sh
+    source "$ROOT/scripts/fuzz-env.sh"
     need_cmd cargo "rustup toolchain install nightly"
     need_cmd cargo-fuzz "cargo install cargo-fuzz"
     need_cmd llvm-profdata "llvm (apt install llvm)"
@@ -165,6 +163,7 @@ main() {
 
     log "done. Example report:"
     log "  llvm-cov report $(fuzzer_bin rash_parse) -instr-profile=$FUZZ/rash_parse.profdata $ROOT/src/applets/sh/parse.rs"
+    fuzz_restore_path
 }
 
 main "$@"

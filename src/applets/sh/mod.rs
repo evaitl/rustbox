@@ -30,12 +30,16 @@ pub struct Shell {
     pub return_status: Option<i32>,
     cmdsub_depth: u32,
     call_depth: u32,
+    #[cfg(feature = "fuzzing")]
+    exec_steps: u32,
 }
 
 const MAX_CMDSUB_DEPTH: u32 = 128;
 pub(crate) const MAX_FUNCTION_DEPTH: u32 = 128;
 #[cfg(feature = "fuzzing")]
 pub(crate) const MAX_LOOP_ITER: u32 = 1000;
+#[cfg(feature = "fuzzing")]
+pub(crate) const MAX_EXEC_STEPS: u32 = 4096;
 
 impl Default for Shell {
     fn default() -> Self {
@@ -69,6 +73,8 @@ impl Shell {
             return_status: None,
             cmdsub_depth: 0,
             call_depth: 0,
+            #[cfg(feature = "fuzzing")]
+            exec_steps: 0,
         }
     }
 
@@ -276,6 +282,9 @@ pub mod fuzz {
         let mut shell = Shell::new();
         shell.set_var("PATH", String::new());
         shell.set_var("IFS", " \t\n".to_string());
+        if let Ok(devnull) = std::fs::File::open("/dev/null") {
+            let _ = rustix::stdio::dup2_stdin(&devnull);
+        }
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = shell.run_script(input);
         }));

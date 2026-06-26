@@ -149,6 +149,80 @@ while [ $n -lt 3 ]; do
   echo $n
 done
 EOF
+    write_seed rash_run elif_else <<'EOF'
+if false; then echo no; elif true; then echo elif; else echo else; fi
+EOF
+    write_seed rash_run case_glob <<'EOF'
+case foo in f*) echo match ;; *) echo nomatch ;; esac
+EOF
+    write_seed rash_run heredoc <<'SEED'
+read -r text <<'BODY'
+hello fuzz
+BODY
+echo $text
+SEED
+    write_seed rash_run function_keyword <<'EOF'
+function greet { echo hi; }
+greet
+EOF
+    write_seed rash_run brace_group <<'EOF'
+{ echo one; echo two; }
+EOF
+    write_seed rash_run subshell <<'EOF'
+(X=inner); echo $X
+EOF
+    write_seed rash_run set_xtrace <<'EOF'
+set -x
+echo traced
+set +x
+EOF
+    write_seed rash_run background <<'EOF'
+: &
+wait
+EOF
+    write_seed rash_run negated_pipeline <<'EOF'
+! false
+echo $?
+EOF
+    write_seed rash_run redirects <<'EOF'
+echo out > /dev/null 2> /dev/null
+echo append >> /dev/null
+EOF
+    write_seed rash_run redirect_only <<'EOF'
+> /dev/null
+EOF
+    write_seed rash_run trap_list <<'EOF'
+trap
+trap - INT
+EOF
+    write_seed rash_run eval_script <<'EOF'
+eval 'echo evaluated'
+EOF
+    write_seed rash_run and_or_chain <<'EOF'
+false || echo or
+true && echo and
+EOF
+    write_seed rash_run for_in_words <<'EOF'
+for w in one two three; do echo $w; done
+EOF
+    write_seed rash_run pipe_three <<'EOF'
+echo a | echo b | echo c
+EOF
+    write_seed rash_run shift_unset <<'EOF'
+set -- a b c
+shift
+echo $1
+unset FOO
+FOO=1
+unset FOO
+echo done
+EOF
+    write_seed rash_run read_here <<'SEED'
+read -r line <<'IN'
+seed line
+IN
+echo $line
+SEED
 
     # --- udhcpc: argv strings and minimal DHCP-shaped bytes ---
     write_seed udhcpc argv_basic <<'EOF'

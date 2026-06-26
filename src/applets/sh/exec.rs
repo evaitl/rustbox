@@ -92,6 +92,13 @@ impl Shell {
     }
 
     pub fn run_list(&mut self, list: &List) -> i32 {
+        #[cfg(feature = "fuzzing")]
+        {
+            self.exec_steps = self.exec_steps.saturating_add(1);
+            if self.exec_steps > super::MAX_EXEC_STEPS {
+                return 1;
+            }
+        }
         if list.andors.is_empty() {
             return 0;
         }
@@ -469,6 +476,7 @@ impl Shell {
 
     fn call_function(&mut self, body: &List, argv: &[String]) -> i32 {
         if self.call_depth >= super::MAX_FUNCTION_DEPTH {
+            #[cfg(not(feature = "fuzzing"))]
             eprintln(format!(
                 "{SHELL_NAME}: maximum function call depth ({}) exceeded",
                 super::MAX_FUNCTION_DEPTH
@@ -858,6 +866,13 @@ fn resolve_command(name: &str) -> Option<String> {
 mod exec_tests {
     use super::super::Shell;
 
+    fn fuzz_shell() -> Shell {
+        let mut shell = Shell::new();
+        shell.set_var("PATH", String::new());
+        shell.set_var("IFS", " \t\n".to_string());
+        shell
+    }
+
     #[test]
     fn runs_function_definition() {
         let mut shell = Shell::new();
@@ -935,8 +950,7 @@ mod exec_tests {
 
     #[test]
     fn function_call_depth_limit_does_not_overflow() {
-        let mut shell = Shell::new();
-        shell.set_var("PATH", String::new());
+        let mut shell = fuzz_shell();
         let status = shell.run_script("f() { f; }; f");
         assert_eq!(status, 1);
     }
@@ -944,9 +958,98 @@ mod exec_tests {
     #[cfg(feature = "fuzzing")]
     #[test]
     fn while_loop_iteration_limit_under_fuzzing() {
-        let mut shell = Shell::new();
-        shell.set_var("PATH", String::new());
+        let mut shell = fuzz_shell();
         let status = shell.run_script("while true; do :; done");
         assert_eq!(status, 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn exec_step_budget_stops_runaway_recursion() {
+        let mut shell = fuzz_shell();
+        let status = shell.run_script("f() { f; }; f");
+        assert_eq!(status, 1);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_elif_and_else_branches() {
+        let mut shell = fuzz_shell();
+        assert_eq!(
+            shell.run_script("if false; then :; elif true; then exit 3; else exit 4; fi"),
+            3
+        );
+        assert_eq!(
+            shell.run_script("if false; then :; elif false; then :; else exit 5; fi"),
+            5
+        );
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_case_and_heredoc() {
+        let mut shell = fuzz_shell();
+        assert_eq!(
+            shell.run_script("case x in x) exit 0 ;; *) exit 9 ;; esac"),
+            0
+        );
+        assert_eq!(shell.run_script("read -r x <<'EOF'\nline\nEOF\necho $x"), 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_brace_subshell_and_background() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script("{ echo hi; }"), 0);
+        assert_eq!(shell.run_script("(exit 0)"), 0);
+        assert_eq!(shell.run_script(": &\nwait"), 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_redirects_and_negated_pipeline() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script("echo hi > /dev/null 2> /dev/null"), 0);
+        assert_eq!(shell.run_script("> /dev/null"), 0);
+        assert_eq!(shell.run_script("! false; echo $?"), 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_pipefail_and_multi_pipe() {
+        let mut shell = fuzz_shell();
+        assert_eq!(
+            shell.run_script("set -o pipefail; false | true; echo $?"),
+            0
+        );
+        assert_eq!(shell.run_script("echo a | echo b | echo c"), 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_function_keyword_return_and_local() {
+        let mut shell = fuzz_shell();
+        assert_eq!(
+            shell.run_script("function f { local x=1; return 9; }; f; echo $?"),
+            0
+        );
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_for_in_and_shift_unset() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script("for x in a b; do :; done"), 0);
+        shell.positional = vec!["rash".into(), "a".into(), "b".into(), "c".into()];
+        assert_eq!(shell.run_script("shift; echo $#"), 0);
+        assert_eq!(shell.run_script("unset V; V=1; unset V"), 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_eval_and_trap() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script("eval 'echo ok'"), 0);
+        assert_eq!(shell.run_script("trap"), 0);
     }
 }

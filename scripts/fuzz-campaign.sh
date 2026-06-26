@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 # Run libFuzzer targets for 30 minutes each (rash split across parse/arith/run).
 set -euo pipefail
-cd "$(dirname "$0")/../fuzz"
-
-# rustup shims can be silent no-ops in some environments; use the toolchain directly.
-if [[ -d "${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin" ]]; then
-  export PATH="${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin:${PATH}"
-fi
-unset CARGO_TARGET_DIR RUSTFLAGS
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/fuzz-env.sh
+source "$ROOT/scripts/fuzz-env.sh"
+cd "$ROOT/../fuzz"
 
 DURATION=1800
 LOG_DIR="${LOG_DIR:-/tmp/rustbox-fuzz-logs}"
@@ -24,8 +21,6 @@ run_one() {
   fi
 }
 
-
-export RUSTBOX_APPLETS_CONFIG="${RUSTBOX_APPLETS_CONFIG:-$(dirname "$0")/../fuzz/applets-fuzz.json}"
 
 run_one dnscached
 run_one sshd
@@ -48,3 +43,4 @@ done
 
 echo "=== fuzz campaign complete ===" | tee "$LOG_DIR/summary.log"
 find ../fuzz/artifacts -type f 2>/dev/null | tee -a "$LOG_DIR/summary.log" || true
+fuzz_restore_path

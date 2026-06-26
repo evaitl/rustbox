@@ -101,6 +101,15 @@ cargo +nightly fuzz run wget -- -max_total_time=30
 
 `rash_run` clears `PATH` so fuzzing exercises builtins and shell logic without executing host binaries. Corpus seeds live under `fuzz/corpus/<target>/` (gitignored); crashes are written to `fuzz/artifacts/`.
 
+Helper scripts (use stable for normal builds; fuzz scripts source `scripts/fuzz-env.sh` for nightly only):
+
+```bash
+./scripts/ci-local.sh              # fmt, clippy, test (matches CI)
+CI_LOCAL_SMOKE=1 ./scripts/ci-local.sh   # also runs qemu-smoke.sh
+./scripts/fuzz-regression.sh rash_run    # replay artifacts/rash_run/*
+./scripts/fuzz-coverage.sh               # fuzz + LLVM coverage replay
+```
+
 ## QEMU
 
 See **[QEMU.md](docs/QEMU.md)** for booting rustbox under QEMU: prerequisites, initrd build, interactive shell (`qemu-shell.sh`), smoke test, networking, and environment variables.
