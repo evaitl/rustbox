@@ -36,6 +36,8 @@ pub mod find;
 pub mod free;
 #[cfg(applet_grep)]
 pub mod grep;
+#[cfg(applet_gzip)]
+pub mod gzip;
 #[cfg(applet_halt)]
 pub mod halt;
 #[cfg(applet_head)]
@@ -54,6 +56,8 @@ pub mod killall;
 pub mod ln;
 #[cfg(all(applet_logger, target_os = "linux"))]
 pub mod logger;
+#[cfg(applet_logrotate)]
+pub mod logrotate;
 #[cfg(applet_ls)]
 pub mod ls;
 #[cfg(all(applet_mdev, target_os = "linux"))]
@@ -122,6 +126,8 @@ pub mod sysctl;
 pub mod syslogd;
 #[cfg(applet_tail)]
 pub mod tail;
+#[cfg(applet_tar)]
+pub mod tar;
 #[cfg(all(applet_telnetd, target_os = "linux"))]
 pub mod telnetd;
 #[cfg(applet_test)]

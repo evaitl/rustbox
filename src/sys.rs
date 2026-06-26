@@ -379,6 +379,21 @@ pub fn dup2_stderr(fd: &impl AsFd) -> Result<()> {
     rustix::stdio::dup2_stderr(fd).map_err(|_| io::Errno::IO)
 }
 
+/// Reattach stdin, stdout, and stderr to `/dev/null`.
+fn redirect_stdio_to_dev_null() -> Result<()> {
+    use std::os::unix::io::AsRawFd;
+
+    let devnull = open_read("/dev/null")?;
+    let fd = devnull.as_raw_fd();
+    dup2_stdin(&devnull)?;
+    dup2_stdout(&devnull)?;
+    dup2_stderr(&devnull)?;
+    if fd > 2 {
+        let _ = unsafe { libc::close(fd) };
+    }
+    Ok(())
+}
+
 /// Reopen stdio on a TTY device (getty-style: open, dup, setsid, controlling tty).
 pub fn reopen_stdio_to_device(path: &str) -> Result<()> {
     use std::os::unix::fs::OpenOptionsExt;
@@ -665,14 +680,29 @@ pub fn clear_kernel_log() -> Result<()> {
 
 #[cfg(target_os = "linux")]
 pub fn daemonize() -> Result<()> {
+    use rustix::fs::Mode as ModeBits;
+
     unsafe {
         match rustix::runtime::kernel_fork()? {
             rustix::runtime::Fork::ParentOf(_) => rustix::runtime::exit_group(0),
-            rustix::runtime::Fork::Child(_) => {
-                let _ = rustix::process::setsid();
-            }
+            rustix::runtime::Fork::Child(_) => {}
+        }
+
+        if rustix::process::setsid().is_err() {
+            rustix::runtime::exit_group(1);
+        }
+
+        match rustix::runtime::kernel_fork()? {
+            rustix::runtime::Fork::ParentOf(_) => rustix::runtime::exit_group(0),
+            rustix::runtime::Fork::Child(_) => {}
         }
     }
+
+    if rustix::process::chdir("/").is_err() {
+        return Err(io::Errno::IO);
+    }
+    let _ = rustix::process::umask(ModeBits::from_raw_mode(0));
+    redirect_stdio_to_dev_null()?;
     Ok(())
 }
 
@@ -826,6 +856,21 @@ pub fn write_sysctl(key: &str, value: &str) -> Result<()> {
     let fd = open_create(&sysctl_proc_path(key))?;
     write(&fd, value.as_bytes())?;
     write(&fd, b"\n")?;
+    Ok(())
+}
+
+pub fn file_size(path: &str) -> Result<u64> {
+    Ok(stat(path)?.st_size as u64)
+}
+
+pub fn write_file(path: &str, data: &[u8]) -> Result<()> {
+    use rustix::fs::{open, Mode, OFlags};
+    let fd = open(
+        path,
+        OFlags::WRONLY | OFlags::CREATE | OFlags::TRUNC,
+        Mode::RUSR | Mode::WUSR | Mode::RGRP | Mode::WGRP,
+    )?;
+    write(&fd, data)?;
     Ok(())
 }
 

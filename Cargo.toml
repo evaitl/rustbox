@@ -20,6 +20,7 @@ panic = "abort"
 [dependencies]
 anyhow = "1.0.102"
 bcrypt = { version = "0.16", optional = true }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 libc = "0.2"
 rustix = { version = "1.1.4", features = ["fs", "process", "time", "stdio", "std", "thread", "runtime", "mount", "system", "pipe", "termios"] }
 rand = { version = "0.10", optional = true }

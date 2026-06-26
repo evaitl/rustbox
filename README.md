@@ -44,7 +44,7 @@ Only listed applets are built; omitted applets default to disabled. Rebuild afte
 | `applet-sshd` | no | `sshd` (`russh`, `tokio`, `bcrypt`) |
 | `wget-tls` | yes | HTTPS in `wget` |
 
-Network daemons (`dnscached`, `thttpd`, `syslogd`, `udhcpc`, `mdev`, `telnetd`) and network utilities (`dig`, `logger`, `nc`, `ntpclient`, `ping`, `wget`, …) are Linux-only. Initrd images use [`initrd/template/etc/inittab`](initrd/template/etc/inittab) (`syslogd`, `dnscached`, `thttpd`, `mdev`, `telnetd`, `rash`).
+Network daemons (`dnscached`, `thttpd`, `syslogd`, `udhcpc`, `mdev`, `telnetd`) and network utilities (`dig`, `logger`, `nc`, `ntpclient`, `ping`, `wget`, …) are Linux-only. Initrd images use [`initrd/template/etc/inittab`](initrd/template/etc/inittab) (`syslogd -k`, `dnscached`, `thttpd`, `mdev`, `telnetd`, `rash`).
 
 Use a different config path with the `RUSTBOX_APPLETS_CONFIG` environment variable:
 
@@ -198,7 +198,7 @@ See **[APPLETS.md](docs/APPLETS.md)** for usage, command-line options, and exit 
 | `swapon` | Activate swap on a device or file (`-p` priority) |
 | `sync` | Flush filesystem buffers |
 | `sysctl` | Read/write kernel parameters (`-a`, `-n`, `key=value`) |
-| `syslogd` | Syslog daemon on `/dev/log` (`-f`, `-O`, `-s`) |
+| `syslogd` | Syslog daemon on `/dev/log`; `-k` also logs `/dev/kmsg` (no `klogd` needed) (`-f`, `-k`, `-O`, `-s`) |
 | `sshd` | **Dev-only, optional** — SSH server (off by default; `--features applet-sshd`; see [SECURITY.md](docs/SECURITY.md)) |
 | `telnetd` | **Dev-only** — plaintext telnet login server (on by default; see [SECURITY.md](docs/SECURITY.md)) |
 | `su` | Drop privileges and run a command or shell as another user (`-c`, `-s`, `-l`) |

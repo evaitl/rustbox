@@ -173,7 +173,7 @@ End-to-end boot test: builds a musl initrd, boots QEMU with virtio-net, runs [`i
 ./scripts/qemu-smoke.sh
 ```
 
-Covers shell builtins, `cron`, networking (`udhcpc`, `ping`, `route`), `thttpd`, `wget`, `dig`, `logger`, `ntpclient`, `nc`, and more. Default wall-clock limit: **60 seconds** (`SMOKE_TIMEOUT`).
+Covers shell builtins, `cron`, networking (`udhcpc`, `ping`, `route`), `thttpd`, `wget`, `dig`, `logger`, `syslogd -k` (kernel log via `/dev/kmsg`, no `klogd`), `ntpclient`, `nc`, and more. Default wall-clock limit: **60 seconds** (`SMOKE_TIMEOUT`).
 
 Full prerequisites, kernel build, and environment variables: **[QEMU.md](QEMU.md)**.
 

@@ -359,7 +359,7 @@ When started as root, binds UDP port 53 first, then drops to the configured user
 ## `dmesg`
 **Approximate binary size** — ~0 KiB marginal.
 
-Print the kernel ring buffer (Linux only).
+Print the kernel ring buffer (Linux only). For a one-shot dump use `dmesg`; for continuous kernel logging into `/var/log/messages`, run [`syslogd -k`](#syslogd) instead of a separate `klogd`.
 
 **Usage**
 
@@ -777,7 +777,7 @@ ln [-s] TARGET LINK...
 ---
 
 ## `logger`
-Send a syslog message to a Unix domain socket (default `/dev/log`). Pair with `syslogd` in the initrd.
+Send a syslog message to a Unix domain socket (default `/dev/log`). Pair with [`syslogd`](#syslogd) in the initrd; use `syslogd -k` if kernel messages should land in the same log file as `logger` output (no separate `klogd` required).
 
 **Usage**
 
@@ -1789,12 +1789,14 @@ sysctl [-a] [-n] [-e] [KEY[=VALUE]]...
 ## `syslogd`
 **Approximate binary size** — ~4 KiB marginal.
 
-Simple syslog daemon listening on a Unix datagram socket (default `/dev/log`).
+Simple syslog daemon listening on a Unix datagram socket (default `/dev/log`) and appending messages to a log file (default `/var/log/messages`). With **`-k`**, it also reads `/dev/kmsg` and logs kernel `printk` output to the same file. RustBox does not ship a separate **`klogd`** applet — **`-k` replaces it**: one daemon handles userspace syslog and kernel messages.
+
+The initrd template starts `syslogd -k` so `/var/log/messages` receives both `logger` traffic and kernel lines (written as `kernel: …`). Use [`cron`](#cron) with the `logrotate` applet (see initrd `/etc/logrotate.conf`) to cap total log size.
 
 **Usage**
 
 ```text
-syslogd [-f] [-O LOG] [-s SOCKET]
+syslogd [-f] [-k] [-O LOG] [-s SOCKET]
 ```
 
 **Options**
@@ -1802,13 +1804,20 @@ syslogd [-f] [-O LOG] [-s SOCKET]
 | Option | Description |
 |--------|-------------|
 | `-f`, `-F` | Run in foreground (do not daemonize) |
+| `-k` | Also read `/dev/kmsg` and append kernel messages to `LOG` (replaces a standalone `klogd`) |
 | `-O LOG` | Log file (default: `/var/log/messages`) |
 | `-s SOCKET` | Unix socket path (default: `/dev/log`) |
+
+**Behavior**
+
+- Without `-k`: only datagrams received on `SOCKET` are logged (e.g. from [`logger`](#logger)).
+- With `-k`: multiplexes `SOCKET` and `/dev/kmsg` via `poll(2)`. Kernel records use the `priority,seq,time,flags;message` format; the header is stripped and the line is stored as `kernel: message`.
+- After `logrotate` renames the active log, the next append creates a new file (open-on-write); no signal is required.
 
 **Exit status**
 
 - `0` — server exited cleanly (normally runs until killed)
-- `1` — bind or I/O error
+- `1` — bind, `/dev/kmsg` open, or I/O error
 
 ---
 

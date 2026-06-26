@@ -115,6 +115,12 @@ stage_rootfs() {
     if [[ -d "$TEMPLATE/etc/cron.test" ]]; then
         cp -a "$TEMPLATE/etc/cron.test" "$STAGING/etc/"
     fi
+    if [[ -f "$TEMPLATE/etc/crontab" ]]; then
+        install -D -m 0644 "$TEMPLATE/etc/crontab" "$STAGING/etc/crontab"
+    fi
+    if [[ -f "$TEMPLATE/etc/logrotate.conf" ]]; then
+        install -D -m 0644 "$TEMPLATE/etc/logrotate.conf" "$STAGING/etc/logrotate.conf"
+    fi
     if [[ -f "$TEMPLATE/sbin/smoke-test" ]]; then
         install -D -m 0755 "$TEMPLATE/sbin/smoke-test" "$STAGING/sbin/smoke-test"
     fi

@@ -116,6 +116,12 @@ logger -t smoke 'qemu smoke line' || exit 1
 grep -q 'qemu smoke line' /var/log/messages || exit 1
 
 deadline
+echo smoke: klog
+echo 'smoke-kmsg-test' > /dev/kmsg || exit 1
+sleep 1
+grep -q 'smoke-kmsg-test' /var/log/messages || exit 1
+
+deadline
 echo smoke: dig
 dig @127.0.0.1 example.com | grep -q 'Query time' || exit 1
 

@@ -74,7 +74,7 @@ INITRD=initrd/initrd-shell.img ./scripts/qemu-test.sh
 
 ## QEMU smoke test
 
-End-to-end regression test: builds the initrd, boots QEMU with a virtio NIC (user-mode NAT), runs DHCP via `udhcpc`, and checks the serial log for `smoke: ok`. The test runs [`initrd/template/sbin/smoke-test`](../initrd/template/sbin/smoke-test) during boot (grep, find, sed, cut, tr, sort, shell arithmetic, `break`, `dmesg`, `cron -n`, `date`, `ps`, `kill -0`, `hostname -F /etc/hostname`, `udhcpc`, `ifconfig`, `route`, `ping`, `wget`, `logger`, `dig @127.0.0.1`, `ntpclient` with [`fake-ntp-reply`](../initrd/template/sbin/fake-ntp-reply), `nc` loopback, and `thttpd -t` exercising CGI, directory listing via `ls -al`, and `wget` against [`cgi-bin/smoke-cgi`](../initrd/template/var/www/cgi-bin/smoke-cgi) and [`listing-test/`](../initrd/template/var/www/listing-test/)).
+End-to-end regression test: builds the initrd, boots QEMU with a virtio NIC (user-mode NAT), runs DHCP via `udhcpc`, and checks the serial log for `smoke: ok`. The test runs [`initrd/template/sbin/smoke-test`](../initrd/template/sbin/smoke-test) during boot (grep, find, sed, cut, tr, sort, shell arithmetic, `break`, `dmesg`, `cron -n`, `date`, `ps`, `kill -0`, `hostname -F /etc/hostname`, `udhcpc`, `ifconfig`, `route`, `ping`, `wget`, `logger`, `syslogd -k` / `/dev/kmsg`, `dig @127.0.0.1`, `ntpclient` with [`fake-ntp-reply`](../initrd/template/sbin/fake-ntp-reply), `nc` loopback, and `thttpd -t` exercising CGI, directory listing via `ls -al`, and `wget` against [`cgi-bin/smoke-cgi`](../initrd/template/var/www/cgi-bin/smoke-cgi) and [`listing-test/`](../initrd/template/var/www/listing-test/)).
 
 **Prerequisites:** `cargo`, `cpio`, `gzip`, `qemu-system-x86_64`, and the rustbox-built kernel at `kernel/vmlinuz` (see below). Kernel build tools (`make`, `flex`, `bison`, `libssl-dev`, `libelf-dev`, `bc`, …) are needed the first time.
 
@@ -194,7 +194,7 @@ If `KERNEL` is unset, `qemu-test.sh` looks for `kernel/vmlinuz`, then falls back
 
 Boot sequence from [`initrd/template/etc/inittab`](../initrd/template/etc/inittab):
 
-1. **sysinit** — mount `proc`, `sysfs`, `devtmpfs`, `devpts`; `mdev -s`; create `/var/log`; run `setup-ping-range`; bring up `lo`; set hostname from `/etc/hostname`; start `syslogd`, `dnscached`, and `thttpd`.
+1. **sysinit** — mount `proc`, `sysfs`, `devtmpfs`, `devpts`; `mdev -s`; create `/var/log`; run `setup-ping-range`; bring up `lo`; set hostname from `/etc/hostname`; start `syslogd -k` (userspace syslog plus `/dev/kmsg` — no separate `klogd`), `cron`, `dnscached`, and `thttpd`.
 2. **wait** — run [`sbin/smoke-test`](../initrd/template/sbin/smoke-test) via `run-smoke-test` (halts the VM on failure).
 3. **respawn** — `mdev -df` (USB hotplug), `telnetd -f`, and an interactive `rash` shell on the serial console.
 

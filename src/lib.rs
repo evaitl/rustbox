@@ -1,4 +1,5 @@
 pub mod applets;
+pub mod compress;
 #[cfg(all(target_os = "linux", any(applet_mdev, test)))]
 pub mod mdev;
 #[cfg(target_os = "linux")]
