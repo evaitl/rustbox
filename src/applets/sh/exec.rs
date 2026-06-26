@@ -70,7 +70,7 @@ impl Shell {
                 drop(read_fd);
                 drop(write_fd);
                 let status = self.run_script(script);
-                runtime::exit_group(status);
+                self.finish_child(status);
             }
             Fork::ParentOf(pid) => {
                 drop(write_fd);
@@ -139,6 +139,43 @@ impl Shell {
                 }
             }
         }
+    }
+
+    /// Run the `EXIT` trap once (removed before execution to avoid recursion).
+    fn run_exit_trap(&mut self) {
+        if self.in_exit_trap {
+            return;
+        }
+        let Some(cmd) = self.traps.remove("EXIT") else {
+            return;
+        };
+        if cmd == "-" || cmd.is_empty() {
+            return;
+        }
+        self.in_exit_trap = true;
+        let _ = self.run_script(&cmd);
+        self.in_exit_trap = false;
+    }
+
+    /// Prepare to leave this shell: run `EXIT` trap, then return the exit status.
+    pub(crate) fn leave_shell(&mut self, status: i32) -> i32 {
+        if !self.in_exit_trap {
+            self.run_exit_trap();
+        }
+        self.exit_status.take().unwrap_or(status)
+    }
+
+    /// `exit` builtin: record status, run `EXIT` trap, return final status.
+    pub(crate) fn do_exit(&mut self, status: i32) -> i32 {
+        self.exit_status = Some(status);
+        if self.in_exit_trap {
+            return status;
+        }
+        self.leave_shell(status)
+    }
+
+    fn finish_child(&mut self, status: i32) -> ! {
+        runtime::exit_group(self.leave_shell(status));
     }
 
     fn run_andor(&mut self, andor: &AndOr) -> i32 {
@@ -229,7 +266,7 @@ impl Shell {
                             }
                             let ctx = RunCtx::default();
                             let status = self.run_command(command, &ctx);
-                            runtime::exit_group(status);
+                            self.finish_child(status);
                         }
                         Ok(Fork::ParentOf(pid)) => pids.push(pid),
                         Err(_) => return 1,
@@ -248,7 +285,7 @@ impl Shell {
                                 drop(w);
                             }
                             let status = self.run_command(command, &RunCtx::default());
-                            runtime::exit_group(status);
+                            self.finish_child(status);
                         }
                         Ok(Fork::ParentOf(pid)) => pids.push(pid),
                         Err(_) => return 1,
@@ -414,7 +451,7 @@ impl Shell {
                     match unsafe { runtime::kernel_fork() } {
                         Ok(Fork::Child(_)) => {
                             let status = self.run_list(list);
-                            runtime::exit_group(status);
+                            self.finish_child(status);
                         }
                         Ok(Fork::ParentOf(pid)) => return sys::wait_pid(pid).unwrap_or(1),
                         Err(_) => return 1,
@@ -456,20 +493,26 @@ impl Shell {
             return self.call_function(&body, &argv);
         }
 
+        if is_builtin(&argv[0]) {
+            if ctx.stdin.is_none() && ctx.stdout.is_none() {
+                if redirects.is_empty() {
+                    return self.run_builtin_in_ctx(&argv, ctx);
+                }
+                return self.run_with_redirects(&argv, &redirects, ctx, |shell, argv| {
+                    shell.run_builtin_in_ctx(argv, ctx)
+                });
+            }
+            return self.run_with_redirects(&argv, &redirects, ctx, |shell, argv| {
+                shell.run_builtin_in_ctx(argv, ctx)
+            });
+        }
+
         if is_pipeline_builtin(&argv[0])
             && (ctx.stdin.is_some() || ctx.stdout.is_some() || !redirects.is_empty())
         {
             return self.run_with_redirects(&argv, &redirects, ctx, |shell, argv| {
                 shell.run_builtin_in_ctx(argv, ctx)
             });
-        }
-
-        if is_builtin(&argv[0])
-            && ctx.stdin.is_none()
-            && ctx.stdout.is_none()
-            && redirects.is_empty()
-        {
-            return self.run_builtin_in_ctx(&argv, ctx);
         }
 
         self.spawn_simple(&argv, &redirects, ctx)
@@ -512,6 +555,7 @@ impl Shell {
                 st
             }
             BuiltinResult::Exit(code) => {
+                let code = self.do_exit(code);
                 if FUZZ_INLINE {
                     code
                 } else {
@@ -551,14 +595,6 @@ impl Shell {
             return self.call_function(&body, argv);
         }
 
-        let program = match resolve_command(&argv[0]) {
-            Some(path) => path,
-            None => {
-                eprintln(format!("{SHELL_NAME}: {}: not found", argv[0]));
-                return 127;
-            }
-        };
-
         if is_builtin(&argv[0]) {
             if FUZZ_INLINE {
                 return self.run_with_redirects(argv, redirects, ctx, |shell, argv| {
@@ -571,15 +607,23 @@ impl Shell {
                     let status = match run_builtin(self, argv) {
                         BuiltinResult::Status(st) => st,
                         BuiltinResult::Return(st) => st,
-                        BuiltinResult::Exit(code) => code,
+                        BuiltinResult::Exit(code) => self.do_exit(code),
                         BuiltinResult::Exec(_) => 127,
                     };
-                    runtime::exit_group(status);
+                    self.finish_child(status);
                 }
                 Ok(Fork::ParentOf(pid)) => return sys::wait_pid(pid).unwrap_or(1),
                 Err(_) => return 1,
             }
         }
+
+        let program = match resolve_command(&argv[0]) {
+            Some(path) => path,
+            None => {
+                eprintln(format!("{SHELL_NAME}: {}: not found", argv[0]));
+                return 127;
+            }
+        };
 
         if FUZZ_INLINE {
             eprintln(format!("{SHELL_NAME}: {}: not found", argv[0]));
@@ -590,12 +634,12 @@ impl Shell {
             Ok(Fork::Child(_)) => {
                 apply_redirects(redirects, ctx);
                 let Some(prog) = to_cstring(&program) else {
-                    runtime::exit_group(127);
+                    self.finish_child(127);
                 };
                 let mut c_args: Vec<std::ffi::CString> =
                     argv.iter().filter_map(|arg| to_cstring(arg)).collect();
                 if c_args.len() != argv.len() {
-                    runtime::exit_group(127);
+                    self.finish_child(127);
                 }
                 if c_args.is_empty() {
                     c_args.push(prog.clone());
@@ -607,7 +651,7 @@ impl Shell {
                 let _ = unsafe {
                     runtime::execve(prog.as_c_str(), arg_ptrs.as_ptr(), env_ptrs.as_ptr())
                 };
-                runtime::exit_group(127);
+                self.finish_child(127);
             }
             Ok(Fork::ParentOf(pid)) => sys::wait_pid(pid).unwrap_or(1),
             Err(_) => 1,
@@ -649,7 +693,7 @@ impl Shell {
         match unsafe { runtime::kernel_fork() } {
             Ok(Fork::Child(_)) => {
                 let status = self.run_andor(andor);
-                runtime::exit_group(status);
+                self.finish_child(status);
             }
             Ok(Fork::ParentOf(pid)) => self.jobs.push(pid),
             Err(_) => {}
@@ -896,6 +940,26 @@ mod exec_tests {
         let mut shell = Shell::new();
         let status = shell.run_script("echo $(echo hi)");
         assert_eq!(status, 0);
+    }
+
+    #[test]
+    fn cd_builtin_without_path_lookup() {
+        let mut shell = fuzz_shell();
+        let sub = std::env::temp_dir().join(format!("rash-cd-{}", std::process::id()));
+        std::fs::create_dir_all(&sub).unwrap();
+        let script = format!("cd {} && pwd", sub.display());
+        assert_eq!(shell.run_script(&script), 0);
+        let _ = std::fs::remove_dir(sub);
+    }
+
+    #[test]
+    fn cd_builtin_with_redirect() {
+        let mut shell = fuzz_shell();
+        let sub = std::env::temp_dir().join(format!("rash-cd-redir-{}", std::process::id()));
+        std::fs::create_dir_all(&sub).unwrap();
+        let script = format!("cd {} 2>/dev/null && pwd", sub.display());
+        assert_eq!(shell.run_script(&script), 0);
+        let _ = std::fs::remove_dir(sub);
     }
 
     #[test]

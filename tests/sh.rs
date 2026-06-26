@@ -79,6 +79,30 @@ fn sh_builtin_cd() {
 }
 
 #[test]
+fn sh_builtin_cd_empty_path() {
+    let dir = TestDir::new();
+    let sub = dir.join("sub");
+    std::fs::create_dir(&sub).unwrap();
+    let out = Rustbox::new()
+        .applet("sh")
+        .args(["-c", &format!("PATH= cd {} && pwd", sub.display())])
+        .stdout();
+    assert_eq!(out.trim(), sub.to_string_lossy());
+}
+
+#[test]
+fn sh_builtin_cd_with_redirect() {
+    let dir = TestDir::new();
+    let sub = dir.join("sub");
+    std::fs::create_dir(&sub).unwrap();
+    let out = Rustbox::new()
+        .applet("sh")
+        .args(["-c", &format!("cd {} 2>/dev/null && pwd", sub.display())])
+        .stdout();
+    assert_eq!(out.trim(), sub.to_string_lossy());
+}
+
+#[test]
 fn sh_runs_script() {
     let dir = TestDir::new();
     let bin_path = bin();
@@ -302,6 +326,60 @@ fn sh_trap_builtin_lists() {
         .args(["-c", "trap 'echo trapped' INT; trap"])
         .status();
     assert_eq!(status, 0);
+}
+
+#[test]
+fn sh_read_default_reply() {
+    let dir = TestDir::new();
+    let path = dir.write("in.txt", "hello\n");
+    let out = Rustbox::new()
+        .applet("rash")
+        .args(["-c", &format!("read < {}; echo \"$REPLY\"", path.display())])
+        .stdout();
+    assert_eq!(out.trim(), "hello");
+}
+
+#[test]
+fn sh_read_named_variable() {
+    let dir = TestDir::new();
+    let path = dir.write("in.txt", "world\n");
+    let out = Rustbox::new()
+        .applet("rash")
+        .args([
+            "-c",
+            &format!("read name < {}; echo \"$name\"", path.display()),
+        ])
+        .stdout();
+    assert_eq!(out.trim(), "world");
+}
+
+#[test]
+fn rash_trap_exit_on_normal_completion() {
+    let dir = TestDir::new();
+    let flag = dir.path().join("exit-ran");
+    let script = format!("trap 'touch {}' EXIT; echo main", flag.display());
+    let out = Rustbox::new().applet("rash").args(["-c", &script]).stdout();
+    assert_eq!(out.trim(), "main");
+    assert!(flag.exists());
+}
+
+#[test]
+fn rash_trap_exit_on_exit_builtin() {
+    let dir = TestDir::new();
+    let flag = dir.path().join("exit-ran");
+    let script = format!("trap 'touch {}' EXIT; exit 0", flag.display());
+    let status = Rustbox::new().applet("rash").args(["-c", &script]).status();
+    assert_eq!(status, 0);
+    assert!(flag.exists());
+}
+
+#[test]
+fn rash_trap_exit_honors_exit_in_trap() {
+    let status = Rustbox::new()
+        .applet("rash")
+        .args(["-c", "trap 'exit 3' EXIT; exit 5"])
+        .status();
+    assert_eq!(status, 3);
 }
 
 #[test]

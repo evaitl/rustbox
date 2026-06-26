@@ -261,16 +261,18 @@ impl Shell {
     }
 
     pub fn builtin_read(&mut self, argv: &[String]) -> i32 {
-        let name = argv.get(1).cloned().unwrap_or_default();
-        if name.is_empty() {
+        if argv.len() > 2 {
             return 2;
         }
+        let name = argv.get(1).map(String::as_str).unwrap_or("REPLY");
         let mut line = String::new();
-        if std::io::stdin().read_line(&mut line).is_err() {
-            return 1;
+        match std::io::stdin().read_line(&mut line) {
+            Ok(0) => return 1,
+            Err(_) => return 1,
+            Ok(_) => {}
         }
         let line = line.trim_end_matches(['\n', '\r']).to_string();
-        self.set_var(&name, line);
+        self.set_var(name, line);
         0
     }
 

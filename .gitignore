@@ -24,6 +24,15 @@
 /fuzz/target/
 /fuzz/profraw/
 /fuzz/*.profdata
+/fuzz/timeout-*
+/fuzz/crash-*
+/fuzz/leak-*
+/fuzz/slow-unit-*
 *.profraw
+/timeout-*
+/crash-*
+/leak-*
+/slow-unit-*
+/tmp/
 /fuzz-thttpd.log
 /fuzz-udhcpc.log

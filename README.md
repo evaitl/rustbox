@@ -27,13 +27,16 @@ Only listed applets are built; omitted applets default to disabled. Rebuild afte
 
 ### Current applet status
 
-[`applets.json`](applets.json) is the source of truth. As of the default config:
+[`applets.json`](applets.json) is the source of truth. Default config:
 
-| Category | Applets |
+| Category | Details |
 |----------|---------|
-| **Enabled** (78 names) | All utilities in the table below, including `telnetd` |
-| **Disabled** | `sshd` (optional; enable in `applets.json` with `--features applet-sshd`) |
-| **Aliases** | `sh` → `rash`, `[` → `test` (separate dispatch entries, one implementation each) |
+| **Enabled** | 78 applet modules (80 dispatch names; `sshd` off; includes `gzip`, `logrotate`, and `tar`) |
+| **Dispatch names** | 80 (`sh` → `rash`, `[` → `test` are separate dispatch entries) |
+| **Disabled** | `sshd` (optional; set `true` in `applets.json` and build with `--features applet-sshd`) |
+| **Aliases** | `sh` → `rash`, `[` → `test` |
+| **Initrd services** | `syslogd -k`, `cron` (daily `logrotate`), `dnscached`, `thttpd`, `mdev`, `telnetd`, `rash` — see [`initrd/template/etc/inittab`](initrd/template/etc/inittab) |
+| **Logging stack** | `syslogd -k` (userspace + kernel via `/dev/kmsg`), `logger`, `logrotate` |
 
 **Cargo features** (see [`Cargo.toml`](Cargo.toml)):
 
@@ -41,10 +44,11 @@ Only listed applets are built; omitted applets default to disabled. Rebuild afte
 |---------|---------|----------|
 | `applet-dig` | yes | `dig` (`simple-dns`) |
 | `applet-dnscached` | yes | `dnscached`, TLS/DoH (`rustls`, `simple-dns`) |
+| `applet-passwd` | yes | `passwd` (bcrypt) |
 | `applet-sshd` | no | `sshd` (`russh`, `tokio`, `bcrypt`) |
 | `wget-tls` | yes | HTTPS in `wget` |
 
-Network daemons (`dnscached`, `thttpd`, `syslogd`, `udhcpc`, `mdev`, `telnetd`) and network utilities (`dig`, `logger`, `nc`, `ntpclient`, `ping`, `wget`, …) are Linux-only. Initrd images use [`initrd/template/etc/inittab`](initrd/template/etc/inittab) (`syslogd -k`, `dnscached`, `thttpd`, `mdev`, `telnetd`, `rash`).
+`dig` requires `applet-dig`. `dnscached`, `passwd`, `telnetd`, and `wget` HTTPS require the default features above. Optional `sshd` requires `applet-sshd`. `gzip`, `tar -z`, and `logrotate` `compress` share the built-in `flate2` gzip backend (`rust_backend`). Network daemons and utilities are Linux-only. See [SECURITY.md](docs/SECURITY.md) for `telnetd`, optional `sshd`, `dnscached`, and `thttpd` exposure notes.
 
 Use a different config path with the `RUSTBOX_APPLETS_CONFIG` environment variable:
 
@@ -54,7 +58,7 @@ RUSTBOX_APPLETS_CONFIG=applets.min.json cargo build --release
 
 ### Binary size (static musl)
 
-With the default [`applets.json`](applets.json) (78 applets enabled, `sshd` off), a **stripped release** build for **`x86_64-unknown-linux-musl`** is about **2.6 MiB** (**~2,720,000 bytes**). Enable `sshd` in `applets.json` with `--features applet-sshd` to add ~3.3 MiB. This is the same static binary [`mkinitrd.sh`](scripts/mkinitrd.sh) uses when the musl target is installed.
+With the default [`applets.json`](applets.json) (78 modules / 80 dispatch names, `sshd` off), a **stripped release** build for **`x86_64-unknown-linux-musl`** is about **2.6 MiB** (run `wc -c` after building; the ~2,720,000-byte figure in [`scripts/applet-sizes.json`](scripts/applet-sizes.json) predates `gzip`, `logrotate`, and `tar`). Enable `sshd` in `applets.json` with `--features applet-sshd` to add ~3.3 MiB. This is the same static binary [`mkinitrd.sh`](scripts/mkinitrd.sh) uses when the musl target is installed.
 
 Build conditions:
 
@@ -63,7 +67,7 @@ Build conditions:
 | Target | `x86_64-unknown-linux-musl` |
 | Profile | `release` (`strip = true`, `lto = true`, `codegen-units = 1`, `panic = "abort"` in [`Cargo.toml`](Cargo.toml)) |
 | Linking | Static C runtime: `RUSTFLAGS='-C target-feature=+crt-static'` |
-| Applets | Default [`applets.json`](applets.json) (all listed applets enabled) |
+| Applets | Default [`applets.json`](applets.json) (78 modules / 80 dispatch names, `sshd` off) |
 
 Reproduce and measure:
 
@@ -88,7 +92,7 @@ Integration tests live in `tests/` and run the built `rustbox` binary against a 
 
 ### Fuzz testing
 
-[`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz) targets the `rash` parser, arithmetic evaluator, and builtin-only script runner, plus `thttpd` config/HTTP parsing and `udhcpc` argument parsing. **Requires a nightly Rust toolchain** (`rustup toolchain install nightly`).
+[`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz) targets the `rash` parser, arithmetic evaluator, and builtin-only script runner, plus `thttpd` config/HTTP parsing, `udhcpc` and `wget` argument parsing, `dnscached`, optional `sshd`, and `gzip` / `tar` argv and payload handling. **Requires a nightly Rust toolchain** (`rustup toolchain install nightly`).
 
 ```bash
 cargo install cargo-fuzz
@@ -99,6 +103,8 @@ cargo +nightly fuzz run rash_run -- -max_total_time=30 -timeout=5
 cargo +nightly fuzz run thttpd -- -max_total_time=30
 cargo +nightly fuzz run udhcpc -- -max_total_time=30
 cargo +nightly fuzz run wget -- -max_total_time=30
+cargo +nightly fuzz run gzip -- -max_total_time=30
+cargo +nightly fuzz run tar -- -max_total_time=30
 ```
 
 `rash_run` clears `PATH` so fuzzing exercises builtins and shell logic without executing host binaries. Corpus seeds live under `fuzz/corpus/<target>/` (gitignored); crashes are written to `fuzz/artifacts/`.
@@ -160,6 +166,7 @@ See **[APPLETS.md](docs/APPLETS.md)** for usage, command-line options, and exit 
 | `find` | Search files (`-name`, `-type`, depth limits) |
 | `free` | Print memory usage from `/proc/meminfo` (`-h`) |
 | `grep` | Search line patterns (`-i`, `-v`, `-r`, …) |
+| `gzip` | Compress or decompress files (`-c`, `-d`, `-f`, `-k`) |
 | `halt` | Halt the system (`-n` skip sync) |
 | `head` | Print first lines (`-n`) |
 | `hostname` | Print or set the system hostname (`-F`/`-f` file) |
@@ -169,6 +176,7 @@ See **[APPLETS.md](docs/APPLETS.md)** for usage, command-line options, and exit 
 | `killall` | Send a signal to processes by name (`-s`) |
 | `ln` | Create links (`-s` symbolic) |
 | `logger` | Send a message to syslog (`-t TAG`, `-p PRIO`, `-S SOCKET`) |
+| `logrotate` | Rotate log files (`-f`; gzip `compress`, `daily`, `maxsize`, `totalsize`) |
 | `ls` | List directory contents (`-l`, `-a`, `-1`) |
 | `mkdir` | Create directories (`-p`) |
 | `mknod` | Create device nodes (`-m`, `b`/`c`/`p`) |
@@ -177,6 +185,7 @@ See **[APPLETS.md](docs/APPLETS.md)** for usage, command-line options, and exit 
 | `mv` | Move or rename files |
 | `nc` | TCP/UDP netcat (`-l` listen, `-u` UDP, `-w` timeout) |
 | `ntpclient` | SNTP time query (`-s` set clock, `-t` timeout) |
+| `passwd` | Change login passwords in `/etc/passwd` (`-f` file) |
 | `ping` | Send ICMP echo requests (`-c`, `-W`, `-q`) |
 | `pivot_root` | Change root mount (`pivot_root(2)`) |
 | `printenv` | Print environment variable values |
@@ -203,6 +212,7 @@ See **[APPLETS.md](docs/APPLETS.md)** for usage, command-line options, and exit 
 | `telnetd` | **Dev-only** — plaintext telnet login server (on by default; see [SECURITY.md](docs/SECURITY.md)) |
 | `su` | Drop privileges and run a command or shell as another user (`-c`, `-s`, `-l`) |
 | `tail` | Print last lines (`-n`) |
+| `tar` | Create, extract, or list ustar archives (`-c`, `-x`, `-t`, `-z`, `-f`) |
 | `top` | Process snapshot sorted by RSS (`-n`, `-d`) |
 | `test` / `[` | Evaluate expressions (POSIX tests) |
 | `thttpd` | Small HTTP server with CGI (`-f`, `-t`, `-c`, `-p`, `-d`); forks per connection; directory listing via `ls -al` when `index.html` is missing |

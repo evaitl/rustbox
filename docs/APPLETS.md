@@ -8,15 +8,40 @@ Unless noted otherwise, operands are file or directory paths. Options must appea
 
 ### Applet index
 
-`basename`, `cat`, `chmod`, `chown`, `cp`, `cron`, `cut`, `date`, `dd`, `dig`, `dirname`, `dnscached`, `dmesg`, `echo`, `env`, `false`, `find`, `free`, `grep`, `halt`, `head`, `hostname`, `ifconfig`, `init`, `kill`, `killall`, `ln`, `logger`, `ls`, `mkdir`, `mdev`, `mknod`, `mount`, `mv`, `nc`, `ntpclient`, `passwd`, `ping`, `pivot_root`, `printenv`, `printf`, `ps`, `pwd`, `rash`, `readlink`, `reboot`, `rm`, `rmdir`, `route`, `sed`, `sleep`, `sort`, `sshd`, `stat`, `su`, `switch_root`, `swapoff`, `swapon`, `sync`, `sysctl`, `syslogd`, `tail`, `telnetd`, `test`, `thttpd`, `top`, `tr`, `true`, `udhcpc`, `umount`, `uptime`, `uname`, `vi`, `wc`, `wget`, `xargs`.
+`basename`, `cat`, `chmod`, `chown`, `cp`, `cron`, `cut`, `date`, `dd`, `dig`, `dirname`, `dnscached`, `dmesg`, `echo`, `env`, `false`, `find`, `free`, `grep`, `gzip`, `halt`, `head`, `hostname`, `ifconfig`, `init`, `kill`, `killall`, `ln`, `logger`, `logrotate`, `ls`, `mkdir`, `mdev`, `mknod`, `mount`, `mv`, `nc`, `ntpclient`, `passwd`, `ping`, `pivot_root`, `printenv`, `printf`, `ps`, `pwd`, `rash`, `readlink`, `reboot`, `rm`, `rmdir`, `route`, `sed`, `sleep`, `sort`, `sshd`, `stat`, `su`, `switch_root`, `swapoff`, `swapon`, `sync`, `sysctl`, `syslogd`, `tail`, `tar`, `telnetd`, `test`, `thttpd`, `top`, `tr`, `true`, `udhcpc`, `umount`, `uptime`, `uname`, `vi`, `wc`, `wget`, `xargs`.
 
 (`sh` is an alias for `rash`; `[` is an alias for `test`.)
 
-**Build status** (default [`applets.json`](../applets.json)): 78 names enabled (`sshd` disabled). `dig` requires `applet-dig` (`simple-dns`). `dnscached`, `passwd`, `telnetd`, and `wget` HTTPS require the default Cargo features `applet-dig`, `applet-dnscached`, `applet-passwd`, and `wget-tls`. Optional `sshd` requires `applet-sshd`. See [SECURITY.md](SECURITY.md) for `telnetd`, optional `sshd`, `dnscached`, and `thttpd` exposure notes. The `vi` editor is documented in [VI.md](VI.md).
+### Current applet status
+
+[`applets.json`](../applets.json) is the source of truth. Default config:
+
+| Category | Details |
+|----------|---------|
+| **Enabled** | 78 applet modules (80 dispatch names; `sshd` off; includes `gzip`, `logrotate`, and `tar`) |
+| **Dispatch names** | 80 (`sh` → `rash`, `[` → `test` are separate dispatch entries) |
+| **Disabled** | `sshd` (optional; set `true` in `applets.json` and build with `--features applet-sshd`) |
+| **Aliases** | `sh` → `rash`, `[` → `test` |
+| **Initrd services** | `syslogd -k`, `cron` (daily [`logrotate`](#logrotate)), `dnscached`, `thttpd`, `mdev`, `telnetd`, `rash` — see [`initrd/template/etc/inittab`](../initrd/template/etc/inittab) |
+| **Logging stack** | [`syslogd -k`](#syslogd) (userspace + kernel via `/dev/kmsg`), [`logger`](#logger), [`logrotate`](#logrotate) |
+
+**Cargo features** (see [`Cargo.toml`](../Cargo.toml)):
+
+| Feature | Default | Pulls in |
+|---------|---------|----------|
+| `applet-dig` | yes | `dig` (`simple-dns`) |
+| `applet-dnscached` | yes | `dnscached`, TLS/DoH (`rustls`, `simple-dns`) |
+| `applet-passwd` | yes | `passwd` (bcrypt) |
+| `applet-sshd` | no | `sshd` (`russh`, `tokio`, `bcrypt`) |
+| `wget-tls` | yes | HTTPS in `wget` |
+
+`dig` requires `applet-dig`. `dnscached`, `passwd`, `telnetd`, and `wget` HTTPS require the default features above. Optional `sshd` requires `applet-sshd`. [`gzip`](#gzip), [`tar -z`](#tar), and [`logrotate`](#logrotate) `compress` share the built-in `flate2` gzip backend (`rust_backend`). Network daemons and utilities are Linux-only. See [SECURITY.md](SECURITY.md) for `telnetd`, optional `sshd`, `dnscached`, and `thttpd` exposure notes. The `vi` editor is documented in [VI.md](VI.md).
+
+Use a different config path with `RUSTBOX_APPLETS_CONFIG` (for example `applets.min.json`).
 
 ### Binary size notes
 
-Marginal sizes are measured by comparing a stripped release build for `x86_64-unknown-linux-musl` with all default applets enabled (~2,720,448 bytes) against the same build with that applet disabled. Values are rounded to the nearest KiB. Because of 4 KiB page alignment and shared code between applets, marginal costs do not sum exactly to the full binary size. Applets marked ~0 KiB still add dispatch-table entries but little or no unique code. Regenerate with [`scripts/measure-applet-sizes.py`](../scripts/measure-applet-sizes.py) and [`scripts/patch-applet-sizes-doc.py`](../scripts/patch-applet-sizes-doc.py).
+Marginal sizes are measured by comparing a stripped release build for `x86_64-unknown-linux-musl` with all default applets enabled against the same build with that applet disabled. The baseline full binary size in [`scripts/applet-sizes.json`](../scripts/applet-sizes.json) predates `gzip`, `logrotate`, and `tar`; re-run [`scripts/measure-applet-sizes.py`](../scripts/measure-applet-sizes.py) and [`scripts/patch-applet-sizes-doc.py`](../scripts/patch-applet-sizes-doc.py) to refresh totals and per-applet lines. Values are rounded to the nearest KiB. Because of 4 KiB page alignment and shared code between applets (especially gzip/tar/logrotate), marginal costs do not sum exactly to the full binary size. Applets marked ~0 KiB still add dispatch-table entries but little or no unique code.
 
 ---
 
@@ -547,6 +572,35 @@ Without `FILE`, reads stdin. Patterns without meta characters use substring matc
 
 ---
 
+## `gzip`
+**Approximate binary size** — not yet measured (see [Binary size notes](#binary-size-notes)).
+
+Compress or decompress files with gzip (DEFLATE). Uses the built-in `flate2` backend (same code as [`tar -z`](#tar) and [`logrotate`](#logrotate) `compress`).
+
+**Usage**
+
+```text
+gzip [-cdfk] [FILE]...
+```
+
+**Options**
+
+| Option | Description |
+|--------|-------------|
+| `-c` | Write to stdout; keep input files |
+| `-d` | Decompress |
+| `-f` | Overwrite existing output without prompting |
+| `-k` | Keep (do not delete) input files after success |
+
+With no `FILE` operands, reads stdin and writes stdout (compress by default, or decompress with `-d`). With operands and without `-c`, compresses each file to `FILE.gz` or decompresses to the basename without `.gz` (or `FILE.out` when the name does not end in `.gz`), then removes the input unless `-k` is set.
+
+**Exit status**
+
+- `0` — success
+- `1` — invalid option, I/O error, or output file exists without `-f`
+
+---
+
 ## `halt`
 **Approximate binary size** — ~0 KiB marginal. Below page-alignment resolution; folded into shared runtime.
 
@@ -801,6 +855,92 @@ If `MESSAGE` is omitted, read stdin until EOF.
 
 - `0` — message sent
 - `1` — invalid option or send failure
+
+---
+
+## `logrotate`
+**Approximate binary size** — not yet measured (see [Binary size notes](#binary-size-notes)).
+
+Rotate log files by renaming the active file, optionally gzip-compressing older generations (built-in; does not invoke the `gzip` applet). Designed for embedded images with a small, bounded log footprint.
+
+Typical use: [`syslogd -k`](#syslogd) writes to `/var/log/messages`; [`cron`](#cron) runs `logrotate` daily from `/etc/crontab`.
+
+**Usage**
+
+```text
+logrotate [-f] [CONFIG]...
+```
+
+**Options**
+
+| Option | Description |
+|--------|-------------|
+| `-f`, `--force` | Rotate even when size/`daily` conditions are not met |
+| `-h`, `--help` | Print usage and exit 0 |
+
+With no `CONFIG` operands, reads `/etc/logrotate.conf`. Multiple config files are processed in order.
+
+**Exit status**
+
+- `0` — all stanzas processed successfully
+- `1` — invalid option, config parse error, or rotation failure
+
+### `logrotate` configuration
+
+Default config path: `/etc/logrotate.conf` (installed from [`initrd/template/etc/logrotate.conf`](../initrd/template/etc/logrotate.conf)). Lines starting with `#` are comments.
+
+**Top-level forms**
+
+| Form | Description |
+|------|-------------|
+| `include DIR` | Read every regular file in `DIR` as additional config |
+| `/path/to/log { … }` | Stanza for one log file |
+
+**Stanza directives**
+
+| Directive | Description |
+|-----------|-------------|
+| `daily` | Rotate when `logrotate` is run (intended for a daily [`cron`](#cron) job) |
+| `rotate N` | Keep `N` rotated files (`log.1`, `log.2`, … or `log.1.gz`, … when `compress` is set). Default: `1` |
+| `compress` | Gzip rotated files (`log.1` → `log.1.gz`) |
+| `size SIZE` / `maxsize SIZE` | Also rotate when the active log reaches `SIZE` (suffix `k`/`K` or `m`/`M` for KiB/MiB) |
+| `totalsize SIZE` | After rotation, delete oldest archives until the active log plus all `log.N` files sum to at most `SIZE` |
+| `missingok` | Do not error if the log file does not exist |
+| `notifempty` | Skip rotation when the active log is empty |
+
+**Rotation behavior**
+
+1. Drop the oldest archive past `rotate` (e.g. `messages.3.gz` when `rotate 3`).
+2. Shift `messages.2.gz` → `messages.3.gz`, `messages.1.gz` → `messages.2.gz`, and so on.
+3. Rename the active log to `messages.1` (uncompressed).
+4. If `compress` is set, gzip to `messages.1.gz` and remove the uncompressed `messages.1`.
+5. If `totalsize` is set, remove the highest-numbered archives until the total size is within the limit.
+6. Create a new empty active log (safe with [`syslogd`](#syslogd), which opens the file on each append).
+
+**Initrd example** (`/etc/logrotate.conf`):
+
+```text
+# Rotate system logs daily; keep total archive size under ~2 MiB.
+/var/log/messages {
+    daily
+    rotate 3
+    compress
+    maxsize 500k
+    totalsize 1536k
+    missingok
+    notifempty
+}
+```
+
+With `maxsize 500k`, `rotate 3`, `compress`, and `totalsize 1536k`, active plus archived logs stay under roughly **2 MiB** on the initrd.
+
+**Initrd cron** ([`/etc/crontab`](../initrd/template/etc/crontab)):
+
+```text
+0 0 * * * root /bin/logrotate /etc/logrotate.conf
+```
+
+Runs at midnight local time. Use `logrotate -f` to test rotation without waiting for cron.
 
 ---
 
@@ -1266,7 +1406,7 @@ History is kept in memory for the session (not persisted to disk).
 - Redirections: `< file` `> file` `>> file` `2> file` `2>&1` `<< DELIM` (here-documents)
 - Compound commands: `if … then … [elif … then …]* [else …] fi`, `while … do … done`, `for var in … do … done`, `case WORD in PATTERN) … ;; esac`, `{ … }`, `( … )`
 - Functions: `name() { … }` / `function name { … }`, `local`, `return`
-- `trap` builtin with INT/HUP/TERM signal delivery at command boundaries
+- `trap` builtin with INT/HUP/TERM signal delivery at command boundaries, and `EXIT` on shell exit
 - Variable expansion: `$VAR`, `${VAR}`, `$1`–`$9`, `$#`, `$?`, `$@`, `$(command)`
 - Glob expansion (unquoted words)
 - Prefix assignments: `VAR=value command …`
@@ -1285,14 +1425,16 @@ History is kept in memory for the session (not persisted to disk).
 | `unset NAME…` | Remove variables |
 | `set [-e] [-x] [-u] [-o pipefail] [--] ARGS…` | Shell options and positional parameters |
 | `shift [N]` | Shift positional parameters |
-| `read [VAR]` | Read a line into `VAR` (default `REPLY`) |
+| `read [VAR]` | Read one line from stdin into `VAR` (default `REPLY`); exit `1` on EOF |
 | `umask [MODE]` | Print or set umask |
 | `exec CMD…` | Replace shell with `CMD` |
 | `. FILE` / `source FILE` | Execute script in current shell |
 | `eval CMD…` | Parse and execute arguments as shell input |
-| `wait [PID]` | Wait for background jobs |
+| `wait` | Wait for all background jobs started with `&` in this shell |
+| `break` | Exit the innermost enclosing `while`/`for` loop (always one level; POSIX `break [n]` is not supported) |
+| `continue` | Skip to the next `while`/`for` iteration (always one level; POSIX `continue [n]` is not supported) |
 | `test EXPR` / `[ EXPR ]` | POSIX test expressions |
-| `trap CMD SIGNAL…` / `trap - SIGNAL…` | Set or clear signal traps (INT, HUP, TERM) |
+| `trap CMD SIGNAL…` / `trap - SIGNAL…` | Set or clear traps (`INT`, `HUP`, `TERM`, `EXIT`); `EXIT` runs once when the shell exits |
 | `local NAME[=VALUE]…` | Declare function-local variables |
 | `return [N]` | Return from a function with status `N` |
 
@@ -1791,7 +1933,7 @@ sysctl [-a] [-n] [-e] [KEY[=VALUE]]...
 
 Simple syslog daemon listening on a Unix datagram socket (default `/dev/log`) and appending messages to a log file (default `/var/log/messages`). With **`-k`**, it also reads `/dev/kmsg` and logs kernel `printk` output to the same file. RustBox does not ship a separate **`klogd`** applet — **`-k` replaces it**: one daemon handles userspace syslog and kernel messages.
 
-The initrd template starts `syslogd -k` so `/var/log/messages` receives both `logger` traffic and kernel lines (written as `kernel: …`). Use [`cron`](#cron) with the `logrotate` applet (see initrd `/etc/logrotate.conf`) to cap total log size.
+The initrd template starts `syslogd -k` so `/var/log/messages` receives both `logger` traffic and kernel lines (written as `kernel: …`). Use [`cron`](#cron) with [`logrotate`](#logrotate) (see [`/etc/logrotate.conf`](#logrotate-configuration)) to cap total log size.
 
 **Usage**
 
@@ -1876,6 +2018,37 @@ With no `FILE` operands, reads stdin.
 
 - `0` — success
 - `1` — invalid option, open error, or read error
+
+---
+
+## `tar`
+**Approximate binary size** — not yet measured (see [Binary size notes](#binary-size-notes)).
+
+Create, extract, or list POSIX **ustar** archives. Optional gzip filter via `-z` (built-in; does not invoke the [`gzip`](#gzip) applet).
+
+**Usage**
+
+```text
+tar [-czxvt] [-f ARCHIVE] [FILE]...
+```
+
+**Options**
+
+| Option | Description |
+|--------|-------------|
+| `-c` | Create archive |
+| `-x` | Extract archive |
+| `-t` | List member names to stdout |
+| `-z` | Gzip-compress on create or gzip-decompress on extract/list |
+| `-v` | Verbose: print member names to stderr while creating or extracting |
+| `-f ARCHIVE` | Archive path (required) |
+
+Exactly one of `-c`, `-x`, or `-t` is required. Create mode requires one or more `FILE` operands; directories are stored recursively. Extract creates parent directories as needed. Only regular files and directories are supported in archives.
+
+**Exit status**
+
+- `0` — success
+- `1` — invalid option, missing operand, or archive error
 
 ---
 

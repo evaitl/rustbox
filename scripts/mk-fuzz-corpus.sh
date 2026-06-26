@@ -390,10 +390,94 @@ EOF
 root:$2b$12$gJ4YRl4nd9asLPOOk8Il2O1cbgwFwh./xyVQOxVfdtJ6kmKHmcPVW:0:0:root:/root:/bin/rash
 EOF
 
+    # --- gzip: argv and payload bytes ---
+    write_seed gzip argv_decompress_stdout <<'EOF'
+-dc
+EOF
+    write_seed gzip argv_compress_stdout <<'EOF'
+-c
+EOF
+    write_seed gzip argv_force_keep <<'EOF'
+-fk file.txt
+EOF
+    write_seed gzip argv_help <<'EOF'
+-h
+EOF
+    write_seed gzip plain_text <<'EOF'
+hello rustbox gzip fuzz seed
+EOF
+    python3 - "$CORPUS/gzip/valid.gz" <<'PY'
+import gzip
+import sys
+
+path = sys.argv[1]
+open(path, "wb").write(gzip.compress(b"rustbox gzip corpus\n" * 8))
+PY
+    python3 - "$CORPUS/gzip/truncated.gz" <<'PY'
+import gzip
+import sys
+
+path = sys.argv[1]
+open(path, "wb").write(gzip.compress(b"x")[:8])
+PY
+
+    # --- tar: argv and archive bytes ---
+    write_seed tar argv_list <<'EOF'
+-tf archive.tar
+EOF
+    write_seed tar argv_extract_gzip <<'EOF'
+-xzf bundle.tar.gz
+EOF
+    write_seed tar argv_create <<'EOF'
+-czf out.tar.gz one.txt two.txt
+EOF
+    write_seed tar argv_help <<'EOF'
+--help
+EOF
+    python3 - "$CORPUS/tar/minimal.tar" <<'PY'
+import io
+import sys
+import tarfile
+
+path = sys.argv[1]
+body = b"tar fuzz payload\n"
+buf = io.BytesIO()
+with tarfile.open(fileobj=buf, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+    info = tarfile.TarInfo(name="hello.txt")
+    info.size = len(body)
+    tar.addfile(info, io.BytesIO(body))
+open(path, "wb").write(buf.getvalue())
+PY
+    python3 - "$CORPUS/tar/minimal.tar.gz" <<'PY'
+import gzip
+import io
+import sys
+import tarfile
+
+path = sys.argv[1]
+body = b"one\n"
+buf = io.BytesIO()
+with tarfile.open(fileobj=buf, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+    info = tarfile.TarInfo(name="one.txt")
+    info.size = len(body)
+    tar.addfile(info, io.BytesIO(body))
+open(path, "wb").write(gzip.compress(buf.getvalue()))
+PY
+    python3 - "$CORPUS/tar/truncated.tar" <<'PY'
+import sys
+
+path = sys.argv[1]
+# ustar header for "x" with truncated body
+block = bytearray(512)
+name = b"trunc.txt"
+block[: len(name)] = name
+open(path, "wb").write(bytes(block) + b"partial")
+PY
+
     local total
     total="$(find "$CORPUS" -type f | wc -l)"
     log "wrote $total seed files"
-    for target in rash_parse rash_arith rash_run udhcpc thttpd wget dnscached sshd; do
+    for target in rash_parse rash_arith rash_run udhcpc thttpd wget dnscached sshd gzip tar; do
         local count
         count="$(find "$CORPUS/$target" -type f 2>/dev/null | wc -l)"
         log "  $target: $count seeds"

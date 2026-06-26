@@ -25,8 +25,12 @@ pub fn run(args: &[&str]) -> i32 {
         if arg.starts_with('-') && arg.len() > 1 {
             let mut rest = &arg[1..];
             while !rest.is_empty() {
-                let ch = rest.as_bytes()[0] as char;
-                rest = &rest[1..];
+                let ch = match rest.chars().next() {
+                    Some(c) => c,
+                    None => break,
+                };
+                let ch_len = ch.len_utf8();
+                rest = &rest[ch_len..];
                 match ch {
                     'c' => create = true,
                     'x' => extract = true,
@@ -345,4 +349,39 @@ fn parent_of(path: &str) -> Option<&str> {
     path.rfind('/')
         .map(|idx| &path[..idx])
         .filter(|p| !p.is_empty())
+}
+
+#[cfg(feature = "fuzzing")]
+pub fn fuzz_parse_args(input: &str) {
+    let args: Vec<String> = input
+        .split_whitespace()
+        .take(32)
+        .map(String::from)
+        .collect();
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let _ = run(&refs);
+}
+
+#[cfg(feature = "fuzzing")]
+pub fn fuzz_input(data: &[u8]) {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    const MAX: usize = 128 * 1024;
+    let data = if data.len() > MAX { &data[..MAX] } else { data };
+
+    let dir = std::env::temp_dir().join(format!("rustbox-tar-fuzz-{}", std::process::id()));
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let archive = dir.join("archive");
+    let _ = std::fs::write(&archive, data);
+    let Some(archive_s) = archive.to_str() else {
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    };
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _ = run(&["-tf", archive_s]);
+        let _ = run(&["-tzf", archive_s]);
+    }));
+    let _ = std::fs::remove_dir_all(&dir);
 }

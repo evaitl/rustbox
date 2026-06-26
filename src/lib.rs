@@ -107,6 +107,44 @@ pub mod fuzz {
             crate::net::sshd::fuzz_input(data);
         }));
     }
+
+    #[cfg(applet_gzip)]
+    pub fn gzip(data: &[u8]) {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        const MAX_LEN: usize = 64 * 1024;
+        let data = if data.len() > MAX_LEN {
+            &data[..MAX_LEN]
+        } else {
+            data
+        };
+
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            if let Ok(input) = std::str::from_utf8(data) {
+                crate::applets::gzip::fuzz_parse_args(input);
+            }
+            crate::applets::gzip::fuzz_input(data);
+        }));
+    }
+
+    #[cfg(applet_tar)]
+    pub fn tar(data: &[u8]) {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        const MAX_LEN: usize = 128 * 1024;
+        let data = if data.len() > MAX_LEN {
+            &data[..MAX_LEN]
+        } else {
+            data
+        };
+
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            if let Ok(input) = std::str::from_utf8(data) {
+                crate::applets::tar::fuzz_parse_args(input);
+            }
+            crate::applets::tar::fuzz_input(data);
+        }));
+    }
 }
 
 use std::io::{self, Write};

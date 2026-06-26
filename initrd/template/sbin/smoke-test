@@ -122,6 +122,38 @@ sleep 1
 grep -q 'smoke-kmsg-test' /var/log/messages || exit 1
 
 deadline
+echo smoke: logrotate
+echo '/tmp/smoke-rotate.log {' > /tmp/smoke.logrotate.conf
+echo '    rotate 1' >> /tmp/smoke.logrotate.conf
+echo '    compress' >> /tmp/smoke.logrotate.conf
+echo '    missingok' >> /tmp/smoke.logrotate.conf
+echo '}' >> /tmp/smoke.logrotate.conf
+printf 'rotate-me\n' > /tmp/smoke-rotate.log
+logrotate -f /tmp/smoke.logrotate.conf || exit 1
+[ -f /tmp/smoke-rotate.log.1.gz ] || exit 1
+gzip -dc /tmp/smoke-rotate.log.1.gz | grep -q rotate-me || exit 1
+
+deadline
+echo smoke: gzip
+printf 'gzip-payload\n' > /tmp/smoke-gzip.txt
+gzip -f /tmp/smoke-gzip.txt || exit 1
+[ -f /tmp/smoke-gzip.txt.gz ] || exit 1
+gzip -dc /tmp/smoke-gzip.txt.gz | grep -q gzip-payload || exit 1
+
+deadline
+echo smoke: tar
+cd /tmp || exit 1
+printf 'tar-payload\n' > smoke-tar.txt
+tar -czf smoke.tgz smoke-tar.txt || exit 1
+rm -f smoke-tar.txt
+tar -xzf smoke.tgz || exit 1
+grep -q tar-payload smoke-tar.txt || exit 1
+printf 'one\n' > smoke-a.txt
+printf 'two\n' > smoke-b.txt
+tar -cf smoke-plain.tar smoke-a.txt smoke-b.txt || exit 1
+tar -tf smoke-plain.tar | grep -q smoke-b.txt || exit 1
+
+deadline
 echo smoke: dig
 dig @127.0.0.1 example.com | grep -q 'Query time' || exit 1
 

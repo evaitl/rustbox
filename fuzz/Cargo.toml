@@ -68,3 +68,17 @@ path = "fuzz_targets/sshd.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "gzip"
+path = "fuzz_targets/gzip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tar"
+path = "fuzz_targets/tar.rs"
+test = false
+doc = false
+bench = false

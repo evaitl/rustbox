@@ -28,6 +28,8 @@ pub struct Shell {
     pub traps: HashMap<String, String>,
     pub local_scopes: Vec<HashMap<String, String>>,
     pub return_status: Option<i32>,
+    in_exit_trap: bool,
+    exit_status: Option<i32>,
     cmdsub_depth: u32,
     call_depth: u32,
     #[cfg(feature = "fuzzing")]
@@ -71,6 +73,8 @@ impl Shell {
             traps: HashMap::new(),
             local_scopes: Vec::new(),
             return_status: None,
+            in_exit_trap: false,
+            exit_status: None,
             cmdsub_depth: 0,
             call_depth: 0,
             #[cfg(feature = "fuzzing")]
@@ -184,17 +188,20 @@ pub fn run(args: &[&str]) -> i32 {
     shell.install_signal_handlers();
 
     if let Some(cmd) = command {
-        return shell.run_script(cmd);
+        let status = shell.run_script(cmd);
+        return shell.leave_shell(status);
     }
     if let Some(path) = script {
         shell.positional[0] = path.to_string();
-        return shell.run_file(path);
+        let status = shell.run_file(path);
+        return shell.leave_shell(status);
     }
     if io::stdin().is_terminal() || interactive {
-        shell.run_interactive()
-    } else {
-        shell.run_stdin()
+        let status = shell.run_interactive();
+        return shell.leave_shell(status);
     }
+    let status = shell.run_stdin();
+    shell.leave_shell(status)
 }
 
 impl Shell {

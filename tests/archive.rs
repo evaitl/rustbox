@@ -171,3 +171,9 @@ fn logrotate_keeps_total_size_small() {
     assert!(log.exists());
     assert!(dir.path().join("app.log.1.gz").exists());
 }
+
+#[test]
+fn tar_utf8_in_bundled_options_does_not_panic() {
+    let status = Rustbox::new().applet("tar").args(["-cccɓcccscc2"]).status();
+    assert_ne!(status, 0);
+}

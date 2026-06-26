@@ -116,3 +116,52 @@ fn process_one(
     }
     Ok(())
 }
+
+#[cfg(feature = "fuzzing")]
+pub fn fuzz_parse_args(input: &str) {
+    let args: Vec<String> = input
+        .split_whitespace()
+        .take(32)
+        .map(String::from)
+        .collect();
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let _ = run(&refs);
+}
+
+#[cfg(feature = "fuzzing")]
+pub fn fuzz_input(data: &[u8]) {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    const MAX: usize = 64 * 1024;
+    let data = if data.len() > MAX { &data[..MAX] } else { data };
+
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        crate::compress::gzip::fuzz_input(data);
+    }));
+
+    if data.len() > 16 * 1024 {
+        return;
+    }
+
+    let dir = std::env::temp_dir().join(format!("rustbox-gzip-fuzz-{}", std::process::id()));
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let plain = dir.join("in");
+    let gz = dir.join("in.gz");
+    if plain.to_str().is_none() || gz.to_str().is_none() {
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+    let plain_s = plain.to_str().unwrap();
+    let gz_s = gz.to_str().unwrap();
+    let _ = std::fs::write(&plain, data);
+    let _ = std::fs::write(&gz, data);
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _ = run(&["-dc", gz_s]);
+        let _ = run(&["-c", plain_s]);
+        let _ = run(&["-dk", gz_s]);
+        let _ = run(&["-fk", plain_s]);
+    }));
+    let _ = std::fs::remove_dir_all(&dir);
+}

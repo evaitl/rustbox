@@ -87,6 +87,35 @@ pub fn compress_stdin_to_stdout() -> io::Result<()> {
     compress_reader_to_writer(&mut input, stdio::stdout())
 }
 
+#[cfg(feature = "fuzzing")]
+pub fn fuzz_input(data: &[u8]) {
+    const MAX_IN: usize = 64 * 1024;
+    const MAX_OUT: usize = 256 * 1024;
+    let data = if data.len() > MAX_IN {
+        &data[..MAX_IN]
+    } else {
+        data
+    };
+    let mut decoder = GzDecoder::new(data);
+    let mut out = Vec::new();
+    let mut buf = [0u8; 4096];
+    loop {
+        let Ok(n) = decoder.read(&mut buf) else {
+            break;
+        };
+        if n == 0 {
+            break;
+        }
+        if out.len() + n > MAX_OUT {
+            break;
+        }
+        out.extend_from_slice(&buf[..n]);
+    }
+    if data.len() <= 16 * 1024 {
+        let _ = compress_bytes(data);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
