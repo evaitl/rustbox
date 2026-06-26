@@ -1,6 +1,6 @@
 [package]
 name = "rustbox"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A BusyBox-style multi-call binary in Rust"
 license = "BlueOak-1.0.0"

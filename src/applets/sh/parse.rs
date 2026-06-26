@@ -770,7 +770,22 @@ impl<'a> Parser<'a> {
                         } else {
                             expand = Some(ExpandCtx::CmdSub { depth: 1 });
                         }
+                    } else if self.peek_char() == Some('{') {
+                        self.bump();
+                        out.push('{');
+                        match &mut expand {
+                            Some(ExpandCtx::Brace { depth }) => *depth += 1,
+                            _ => expand = Some(ExpandCtx::Brace { depth: 1 }),
+                        }
                     }
+                }
+                '{' if matches!(expand, Some(ExpandCtx::Brace { .. })) => {
+                    self.bump();
+                    out.push('{');
+                    if let Some(ExpandCtx::Brace { depth }) = &mut expand {
+                        *depth += 1;
+                    }
+                    started = true;
                 }
                 '(' if expand.is_some() => {
                     self.bump();
@@ -779,6 +794,7 @@ impl<'a> Parser<'a> {
                         Some(ExpandCtx::Arith { depth }) | Some(ExpandCtx::CmdSub { depth }) => {
                             *depth += 1;
                         }
+                        Some(ExpandCtx::Brace { .. }) => {}
                         None => {}
                     }
                 }
@@ -804,7 +820,22 @@ impl<'a> Parser<'a> {
                             expand = None;
                         }
                     }
+                    Some(ExpandCtx::Brace { .. }) | None => break,
+                },
+                '}' if started => match &mut expand {
+                    Some(ExpandCtx::Brace { depth }) => {
+                        self.bump();
+                        out.push('}');
+                        *depth -= 1;
+                        if *depth == 0 {
+                            expand = None;
+                        }
+                    }
                     None => break,
+                    _ => {
+                        self.bump();
+                        out.push('}');
+                    }
                 },
                 _ => {
                     self.bump();
@@ -911,6 +942,7 @@ fn empty_list() -> List {
 enum ExpandCtx {
     CmdSub { depth: i32 },
     Arith { depth: i32 },
+    Brace { depth: i32 },
 }
 
 fn is_name(s: &str) -> bool {
@@ -1002,6 +1034,31 @@ mod tests {
                 assert_eq!(cmd.words[0].text, "echo");
             }
             _ => panic!("expected simple"),
+        }
+    }
+
+    #[test]
+    fn parses_param_default_word() {
+        let mut p = Parser::new("echo ${UNSET:-fallback}");
+        let list = p.parse_list().unwrap();
+        match &list.andors[0].pipelines[0].commands[0] {
+            Command::Simple(cmd) => {
+                assert_eq!(cmd.words.len(), 2);
+                assert_eq!(cmd.words[1].text, "${UNSET:-fallback}");
+            }
+            other => panic!("expected simple, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_nested_param_default_word() {
+        let mut p = Parser::new("echo ${A:-${B:-inner}}");
+        let list = p.parse_list().unwrap();
+        match &list.andors[0].pipelines[0].commands[0] {
+            Command::Simple(cmd) => {
+                assert_eq!(cmd.words[1].text, "${A:-${B:-inner}}");
+            }
+            other => panic!("expected simple, got {other:?}"),
         }
     }
 

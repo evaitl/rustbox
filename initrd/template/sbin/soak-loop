@@ -1,9 +1,7 @@
 #!/bin/rash
 # Periodic load + memory heartbeat for QEMU soak tests.
 
-if [ -z "$SOAK_HEARTBEAT_SEC" ]; then
-    SOAK_HEARTBEAT_SEC=30
-fi
+SOAK_HEARTBEAT_SEC="${SOAK_HEARTBEAT_SEC:-30}"
 
 mem_used_kb() {
     line=$(grep '^MemTotal:' /proc/meminfo)

@@ -224,6 +224,52 @@ IN
 echo $line
 SEED
 
+    write_seed rash_run param_default <<'EOF'
+echo ${UNSET:-default}
+EOF
+    write_seed rash_run param_assign <<'EOF'
+echo ${ASSIGN:=assigned}
+echo $ASSIGN
+EOF
+    write_seed rash_run param_nested <<'EOF'
+echo ${OUTER:-${INNER:-nested}}
+EOF
+    write_seed rash_run external_not_found <<'EOF'
+missing-cmd-xyz 2>/dev/null
+echo $?
+EOF
+    write_seed rash_run builtin_redirect <<'EOF'
+echo redirected > /dev/null 2>&1
+EOF
+    write_seed rash_run dup_stderr <<'EOF'
+echo both 2>&1
+EOF
+    write_seed rash_run background_list <<'EOF'
+sleep 0 &
+echo bg
+EOF
+    write_seed rash_run errexit_pipefail <<'EOF'
+set -e
+set -o pipefail
+false || true
+true | false
+echo $?
+EOF
+    write_seed rash_run heredoc_expand <<'SEED'
+read -r line <<END
+body line
+END
+echo $line
+SEED
+    write_seed rash_run case_patterns <<'EOF'
+case abc in a*) echo star ;; ?bc) echo qmark ;; *) echo other ;; esac
+EOF
+    write_seed rash_run while_until <<'EOF'
+n=0
+while [ $n -lt 2 ]; do n=$((n+1)); done
+echo $n
+EOF
+
     # --- udhcpc: argv strings and minimal DHCP-shaped bytes ---
     write_seed udhcpc argv_basic <<'EOF'
 -i eth0 -q -n -t 5

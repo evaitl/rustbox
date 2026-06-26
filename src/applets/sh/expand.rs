@@ -18,9 +18,10 @@ pub struct ExpandCtx<'a> {
     pub positional: &'a [String],
     pub last_status: i32,
     pub nounset: bool,
+    pub assign_out: Option<&'a mut HashMap<String, String>>,
 }
 
-pub fn expand_word(ctx: &ExpandCtx<'_>, word: &str, split: bool) -> Result<Vec<String>, ()> {
+pub fn expand_word(ctx: &mut ExpandCtx<'_>, word: &str, split: bool) -> Result<Vec<String>, ()> {
     let mut fields = Vec::new();
     let mut current = String::new();
     let mut chars = word.chars().peekable();
@@ -116,8 +117,13 @@ pub fn expand_command_substitution(shell: &mut Shell, input: &str) -> Result<Str
                 continue;
             }
             if !literal.is_empty() {
-                let ctx = shell.expand_ctx();
-                out.push_str(&expand_literal(&ctx, &literal)?);
+                let mut ctx = shell.expand_ctx();
+                let mut assigns = HashMap::new();
+                ctx.assign_out = Some(&mut assigns);
+                out.push_str(&expand_literal(&mut ctx, &literal)?);
+                for (k, v) in assigns {
+                    shell.set_var(&k, v);
+                }
                 literal.clear();
             }
             chars.next();
@@ -134,13 +140,18 @@ pub fn expand_command_substitution(shell: &mut Shell, input: &str) -> Result<Str
     }
 
     if !literal.is_empty() {
-        let ctx = shell.expand_ctx();
-        out.push_str(&expand_literal(&ctx, &literal)?);
+        let mut ctx = shell.expand_ctx();
+        let mut assigns = HashMap::new();
+        ctx.assign_out = Some(&mut assigns);
+        out.push_str(&expand_literal(&mut ctx, &literal)?);
+        for (k, v) in assigns {
+            shell.set_var(&k, v);
+        }
     }
     Ok(out)
 }
 
-fn expand_literal(ctx: &ExpandCtx<'_>, input: &str) -> Result<String, ()> {
+fn expand_literal(ctx: &mut ExpandCtx<'_>, input: &str) -> Result<String, ()> {
     let mut out = String::new();
     let mut chars = input.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -247,7 +258,7 @@ fn read_name(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Result<Str
 }
 
 fn expand_param(
-    ctx: &ExpandCtx<'_>,
+    ctx: &mut ExpandCtx<'_>,
     chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
     out: &mut String,
     split: bool,
@@ -274,10 +285,20 @@ fn expand_param(
         }
         '{' => {
             let name = read_name(chars)?;
-            if chars.next() != Some('}') {
+            if chars.peek() == Some(&'}') {
+                chars.next();
+                push_var(ctx, out, &name)?;
+            } else if chars.peek() == Some(&':') {
+                chars.next();
+                let op = chars.next().ok_or(())?;
+                let word = read_brace_word(chars)?;
+                if chars.next() != Some('}') {
+                    return Err(());
+                }
+                apply_brace_subst(ctx, out, &name, op, &word, split)?;
+            } else {
                 return Err(());
             }
-            push_var(ctx, out, &name)?;
         }
         '(' => {
             if chars.peek() == Some(&'(') {
@@ -324,6 +345,81 @@ fn expand_param(
             out.push('$');
             out.push(next);
         }
+    }
+    Ok(())
+}
+
+fn read_brace_word(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Result<String, ()> {
+    let mut word = String::new();
+    let mut depth = 0i32;
+    while let Some(&ch) = chars.peek() {
+        if ch == '}' && depth == 0 {
+            return Ok(word);
+        }
+        let next = chars.next().unwrap();
+        if next == '{' {
+            depth += 1;
+        } else if next == '}' {
+            depth -= 1;
+        }
+        word.push(next);
+    }
+    Err(())
+}
+
+fn is_unset_or_null(ctx: &ExpandCtx<'_>, name: &str) -> bool {
+    ctx.vars.get(name).map(|s| s.is_empty()).unwrap_or(true)
+}
+
+fn expand_brace_word(ctx: &mut ExpandCtx<'_>, word: &str, split: bool) -> Result<String, ()> {
+    expand_word(ctx, word, split).map(|fields| {
+        if split {
+            fields.join(" ")
+        } else {
+            fields.concat()
+        }
+    })
+}
+
+fn apply_brace_subst(
+    ctx: &mut ExpandCtx<'_>,
+    out: &mut String,
+    name: &str,
+    op: char,
+    word: &str,
+    split: bool,
+) -> Result<(), ()> {
+    match op {
+        '-' => {
+            if is_unset_or_null(ctx, name) {
+                out.push_str(&expand_brace_word(ctx, word, split)?);
+            } else {
+                out.push_str(ctx.vars.get(name).map(String::as_str).unwrap_or(""));
+            }
+        }
+        '=' => {
+            if is_unset_or_null(ctx, name) {
+                let value = expand_brace_word(ctx, word, split)?;
+                ctx.vars.insert(name.to_string(), value.clone());
+                if let Some(assigns) = ctx.assign_out.as_mut() {
+                    assigns.insert(name.to_string(), value.clone());
+                }
+                out.push_str(&value);
+            } else {
+                out.push_str(ctx.vars.get(name).map(String::as_str).unwrap_or(""));
+            }
+        }
+        '+' => {
+            if !is_unset_or_null(ctx, name) {
+                out.push_str(&expand_brace_word(ctx, word, split)?);
+            }
+        }
+        '?' => {
+            if is_unset_or_null(ctx, name) {
+                return Err(());
+            }
+        }
+        _ => return Err(()),
     }
     Ok(())
 }
@@ -442,15 +538,20 @@ pub fn expand_argv_words(shell: &mut Shell, words: &[Word]) -> ExpandResult<Vec<
 
 fn expand_argv_words_inner(shell: &mut Shell, words: &[Word]) -> Result<Vec<String>, ()> {
     let mut argv = Vec::new();
+    let mut assigns = HashMap::new();
     for word in words {
         if matches!(word.quote, QuoteMode::Single) {
             argv.push(word.text.clone());
             continue;
         }
         let text = expand_command_substitution(shell, &word.text)?;
-        let ctx = shell.expand_ctx();
+        let mut ctx = shell.expand_ctx();
+        ctx.assign_out = Some(&mut assigns);
         let split = matches!(word.quote, QuoteMode::None);
-        argv.extend(expand_word(&ctx, &text, split)?);
+        argv.extend(expand_word(&mut ctx, &text, split)?);
+    }
+    for (k, v) in assigns {
+        shell.set_var(&k, v);
     }
     Ok(argv)
 }
@@ -468,13 +569,14 @@ mod tests {
     fn long_positional_index_does_not_overflow() {
         let vars = HashMap::new();
         let positional = vec!["rash".to_string()];
-        let ctx = ExpandCtx {
+        let mut ctx = ExpandCtx {
             vars,
             positional: &positional,
             last_status: 0,
             nounset: false,
+            assign_out: None,
         };
-        let _ = expand_word(&ctx, "$99999999999999999999", false);
+        let _ = expand_word(&mut ctx, "$99999999999999999999", false);
     }
 
     #[test]
@@ -482,13 +584,14 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("X".to_string(), "hi".to_string());
         let positional = vec!["rash".to_string()];
-        let ctx = ExpandCtx {
+        let mut ctx = ExpandCtx {
             vars,
             positional: &positional,
             last_status: 0,
             nounset: false,
+            assign_out: None,
         };
-        let out = expand_word(&ctx, "$X", false).unwrap();
+        let out = expand_word(&mut ctx, "$X", false).unwrap();
         assert_eq!(out, vec!["hi"]);
     }
 
@@ -521,18 +624,19 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("IFS".to_string(), " \t\n".to_string());
         let positional = vec!["rash".to_string()];
-        let ctx = ExpandCtx {
+        let mut ctx = ExpandCtx {
             vars,
             positional: &positional,
             last_status: 0,
             nounset: false,
+            assign_out: None,
         };
         assert_eq!(
-            expand_word(&ctx, "a b c", true).unwrap(),
+            expand_word(&mut ctx, "a b c", true).unwrap(),
             vec!["a", "b", "c"]
         );
-        assert_eq!(expand_word(&ctx, "a\nb", true).unwrap(), vec!["a", "b"]);
-        assert_eq!(expand_word(&ctx, "a  b", true).unwrap(), vec!["a", "b"]);
+        assert_eq!(expand_word(&mut ctx, "a\nb", true).unwrap(), vec!["a", "b"]);
+        assert_eq!(expand_word(&mut ctx, "a  b", true).unwrap(), vec!["a", "b"]);
     }
 
     #[test]
@@ -540,15 +644,67 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("IFS".to_string(), " \t\n".to_string());
         let positional = vec!["rash".to_string()];
-        let ctx = ExpandCtx {
+        let mut ctx = ExpandCtx {
             vars,
             positional: &positional,
             last_status: 0,
             nounset: false,
+            assign_out: None,
         };
-        assert_eq!(expand_word(&ctx, "a b c", false).unwrap(), vec!["a b c"]);
+        assert_eq!(
+            expand_word(&mut ctx, "a b c", false).unwrap(),
+            vec!["a b c"]
+        );
     }
 
+    #[test]
+    fn expands_default_substitution() {
+        let vars = HashMap::new();
+        let positional = vec!["rash".to_string()];
+        let mut ctx = ExpandCtx {
+            vars,
+            positional: &positional,
+            last_status: 0,
+            nounset: false,
+            assign_out: None,
+        };
+        let out = expand_word(&mut ctx, "${UNSET:-fallback}", false).unwrap();
+        assert_eq!(out, vec!["fallback"]);
+    }
+
+    #[test]
+    fn expands_assign_default_substitution() {
+        let vars = HashMap::new();
+        let positional = vec!["rash".to_string()];
+        let mut assigns = HashMap::new();
+        let mut ctx = ExpandCtx {
+            vars,
+            positional: &positional,
+            last_status: 0,
+            nounset: false,
+            assign_out: Some(&mut assigns),
+        };
+        let out = expand_word(&mut ctx, "${X:=set}", false).unwrap();
+        assert_eq!(out, vec!["set"]);
+        assert_eq!(assigns.get("X").map(String::as_str), Some("set"));
+    }
+
+    #[test]
+    fn expands_nested_default_substitution() {
+        let vars = HashMap::new();
+        let positional = vec!["rash".to_string()];
+        let mut ctx = ExpandCtx {
+            vars,
+            positional: &positional,
+            last_status: 0,
+            nounset: false,
+            assign_out: None,
+        };
+        let out = expand_word(&mut ctx, "${A:-${B:-inner}}", false).unwrap();
+        assert_eq!(out, vec!["inner"]);
+    }
+
+    #[cfg(not(feature = "fuzzing"))]
     #[test]
     fn argv_splits_command_substitution_on_ifs() {
         use super::super::Shell;
@@ -561,6 +717,7 @@ mod tests {
         assert_eq!(argv, vec!["a", "b", "c"]);
     }
 
+    #[cfg(not(feature = "fuzzing"))]
     #[test]
     fn argv_keeps_quoted_command_substitution_unsplit() {
         use super::super::Shell;

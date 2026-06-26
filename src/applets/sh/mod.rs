@@ -139,6 +139,7 @@ impl Shell {
             positional: &self.positional,
             last_status: self.last_status,
             nounset: self.nounset,
+            assign_out: None,
         }
     }
 

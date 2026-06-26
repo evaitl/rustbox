@@ -349,9 +349,10 @@ impl Shell {
                     for item in items {
                         let expanded = expand::expand_command_substitution(self, item)
                             .unwrap_or_else(|_| item.clone());
-                        let ctx = self.expand_ctx();
-                        values
-                            .extend(expand::expand_word(&ctx, &expanded, true).unwrap_or_default());
+                        let mut ctx = self.expand_ctx();
+                        values.extend(
+                            expand::expand_word(&mut ctx, &expanded, true).unwrap_or_default(),
+                        );
                     }
                     values
                 } else {
@@ -390,8 +391,8 @@ impl Shell {
                     super::parse::QuoteMode::Single => word.text.clone(),
                     _ => self.expand_assign(&word.text),
                 };
-                let ctx = self.expand_ctx();
-                let value = expand::expand_word(&ctx, &text, false)
+                let mut ctx = self.expand_ctx();
+                let value = expand::expand_word(&mut ctx, &text, false)
                     .unwrap_or_default()
                     .join("");
                 for arm in arms {
@@ -912,6 +913,7 @@ mod exec_tests {
         assert_eq!(status, 0);
     }
 
+    #[cfg(not(feature = "fuzzing"))]
     #[test]
     fn export_passes_environment_to_child() {
         let mut shell = Shell::new();
@@ -1051,5 +1053,46 @@ mod exec_tests {
         let mut shell = fuzz_shell();
         assert_eq!(shell.run_script("eval 'echo ok'"), 0);
         assert_eq!(shell.run_script("trap"), 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_param_default_substitution() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script("echo ${UNSET:-fallback}"), 0);
+        assert_eq!(shell.run_script("X=${Y:=assigned}; echo $X"), 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_external_command_not_found() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script("definitely-not-an-applet-xyz"), 127);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_redirect_dup_and_heredoc() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script("echo x > /dev/null 2>&1"), 0);
+        assert_eq!(
+            shell.run_script("read -r line <<EOF\nbody\nEOF\necho $line"),
+            0
+        );
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_background_and_case() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script(": &\necho after"), 0);
+        assert_eq!(shell.run_script("case x in x) echo ok ;; esac"), 0);
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn fuzz_syntax_error_returns_two() {
+        let mut shell = fuzz_shell();
+        assert_eq!(shell.run_script("if then"), 2);
     }
 }
